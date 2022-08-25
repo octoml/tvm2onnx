@@ -1,0 +1,68 @@
+[tool.poetry]
+name = "tvm2onnx"
+version = "0.1.0"
+description = "Tune and convert TVM models to ONNX"
+authors = ["Robert Kimball <bobkimball@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.11"
+
+# TVM Dependencies
+numpy = "1.21.6"
+psutil = "5.7.2"
+tornado = "6.0.4"
+xgboost = "1.5.2"
+decorator = "4.4.2"
+cloudpickle = "^1.6.0"
+packaging = "20.9"
+six = "1.16.0"
+attrs = "21.2.0"
+orderedset = "2.0.3"
+typed-ast = "1.4.3"
+requests = "2.27.1"
+Pillow = "^8.4.0"
+Cython = "0.29.23"
+synr = "0.6.0"
+scipy = {version = "1.4.1", markers="platform_machine == 'x86_64' or platform_machine == 'arm64'"}
+
+# tvm2onnx Dependencies
+structlog = "^21.2.0"
+onnx = "1.12.0"
+onnxruntime-gpu = "1.12.1"
+cookiecutter = "^1.7.2"
+
+# dev dependencies
+pytest = "^6.1.2"
+pytest-cov = "^3.0.0"
+pytest-mock = "^3.1.0"
+pytest-faker = "^2.0.0"
+pytest-testmon = "^1.0.3"
+pytest-test-groups = "^1.0.3"
+pytest-xdist = "^2.4.0"
+pytest-virtualenv = "^1.7.0"
+black = "22.3.0"
+isort = "^5.8.0"
+mypy = "^0.790"
+flake8 = "^3.9.2"
+ffi-navigator = "^0.5.2"
+typing-extensions = "*"
+parse = "*"
+
+[tool.isort]
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::DeprecationWarning"]
+addopts = ["--no-cov-on-fail"]
+markers= [
+    "cuda: mark a test as cuda only (deselect with '-m \"not cuda\"')"
+]
+
+[build-system]
+requires = ["poetry>=1.0.10"]
+build-backend = "poetry.masonry.api"

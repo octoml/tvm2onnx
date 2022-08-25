@@ -1,0 +1,9 @@
+[flake8]
+max-line-length = 100
+ignore = E265,E402,E128,W503,E231
+extend-ignore = E203
+exclude =
+    __pycache__,
+    .cache
+    .mypy_cache
+    .pytest_cache

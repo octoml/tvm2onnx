@@ -1,0 +1,42 @@
+name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_USER: ${{ secrets.DOCKER_USER }}
+      DOCKER_PASS: ${{ secrets.DOCKER_PASS }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+          submodules: recursive
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # In this step, this action saves a list of existing images,
+    # the cache is created without them in the post run.
+    # It also restores the cache if it exists.
+    - uses: satackey/action-docker-layer-caching@v0.0.11
+      # Ignore the failure of a step and avoid terminating the job.
+      continue-on-error: true
+
+    - name: Build docker images and test
+      run: |
+        echo "Building test image"
+        DOCKER_BUILDKIT=1 docker build \
+        -t ghcr.io/octoml/tvm2onnx/ci:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --cache-from ghcr.io/octoml/tvm2onnx/ci:latest \
+        -f Dockerfile .
+        docker push ghcr.io/octoml/tvm2onnx/ci:latest
+        echo "Running lint"
+        docker run -t ghcr.io/octoml/tvm2onnx/ci:latest make lint
+        echo "Running test"
+        docker run -t ghcr.io/octoml/tvm2onnx/ci:latest make test -s

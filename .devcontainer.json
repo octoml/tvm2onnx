@@ -1,0 +1,25 @@
+{
+    "image": "tvm2onnx:dev",
+    "dockerFile": "Dockerfile",
+    "context": ".",
+    "build": {
+        "args": {
+            "BUILDKIT_INLINE_CACHE": "1",
+        },
+    },
+    "runArgs": [
+        "--gpus", "all",
+        "-v", "/var/run/docker.sock:/var/run/docker.sock"
+    ],
+    "workspaceFolder": "/usr/tvm2onnx",
+    "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cmake-tools",
+        "tqchen.ffi-navigator",
+        "ritwickdey.liveserver",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "talshalti.netron"
+    ]
+}
