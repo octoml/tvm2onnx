@@ -13,13 +13,14 @@
     ],
     "workspaceFolder": "/usr/tvm2onnx",
     "extensions": [
-        "ms-vscode.cpptools",
-        "ms-vscode.cpptools-extension-pack",
-        "ms-vscode.cmake-tools",
-        "tqchen.ffi-navigator",
-        "ritwickdey.liveserver",
+        "bierner.markdown-preview-github-styles",
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "talshalti.netron"
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cpptools",
+        "ritwickdey.liveserver",
+        "talshalti.netron",
+        "tqchen.ffi-navigator"
     ]
 }
