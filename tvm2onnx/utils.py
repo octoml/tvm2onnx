@@ -1,6 +1,4 @@
 import os
-import pathlib
-import typing
 
 import structlog
 
@@ -49,14 +47,6 @@ def set_tvm_num_threads(tvm_num_threads: int):
 
 def get_tvm_revision_hash() -> str:
     return os.environ["TVM_REVISION_HASH"]
-
-
-def read_file_bytes(path: pathlib.Path) -> typing.Tuple[str, bytes]:
-    library_name = os.path.basename(path)
-    library_bytes = bytes()
-    with open(path, "rb") as in_file:
-        library_bytes = in_file.read()
-    return library_name, library_bytes
 
 
 def print_path_contents(dir_root):

@@ -2,6 +2,7 @@
 import os
 import tarfile
 import tempfile
+import shutil
 
 import numpy as np
 import onnx
@@ -64,12 +65,16 @@ def test_onnx_package():
         assert np.allclose(product, actual_product)
 
 
-def add_constant_model(model_dir, input_shape):
+def add_constant_onnx_model(model_dir, input_shape, uniform=False):
     """Returns an ONNX model with external constants."""
     a = make_tensor_value_info("a", TensorProto.FLOAT, input_shape)
 
-    c1_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
-    c2_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
+    if uniform:
+        c1_data = np.full(shape=input_shape, fill_value=3, dtype=np.dtype("float32"))
+        c2_data = np.full(shape=input_shape, fill_value=4, dtype=np.dtype("float32"))
+    else:
+        c1_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
+        c2_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
     c1 = make_node(
         "Constant",
         inputs=[],
@@ -83,6 +88,7 @@ def add_constant_model(model_dir, input_shape):
             raw=True,
         ),
     )
+    print(f"const array size {c1_data.size * 4}")
 
     c2 = make_node(
         "Constant",
@@ -110,6 +116,11 @@ def add_constant_model(model_dir, input_shape):
     onnx_proto = make_model(graph)
     onnx.checker.check_model(onnx_proto)
 
+    onnx_model = ONNXModel(model=onnx_proto)
+    onnx_model.infer_and_update_inputs()
+    relay_model = onnx_model.to_relay()
+    relay_model.to_tvm_file("/usr/constant_add.tvm")
+
     model_path = os.path.join(model_dir, "test.onnx")
     convert_model_to_external_data(
         onnx_proto,
@@ -125,7 +136,10 @@ def test_constant_model():
     input_shape = [8, 3, 224, 224]
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
-        c1_data, c2_data = add_constant_model(model_dir=tdir, input_shape=input_shape)
+        c1_data, c2_data = add_constant_onnx_model(
+            model_dir=tdir, input_shape=input_shape, uniform=True
+        )
+        c1_data, c2_data = add_constant_onnx_model(model_dir=tdir, input_shape=input_shape, uniform=True)
         onnx_model = ONNXModel.from_file(model_path)
         onnx_model.infer_and_update_inputs()
         relay_model = onnx_model.to_relay()
@@ -136,6 +150,7 @@ def test_constant_model():
             output_path=onnx_path,
         )
         model_dir = os.path.join(tdir, "model")
+        shutil.copy(onnx_path, "/usr/constants.tvm.onnx")
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
 
