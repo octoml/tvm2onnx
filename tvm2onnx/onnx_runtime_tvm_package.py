@@ -16,7 +16,8 @@ import structlog
 import tvm
 from onnx import numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
-from onnx.helper import make_graph, make_model, make_node, make_tensor_value_info
+from onnx.helper import make_graph, make_model, make_node, make_tensor_value_info, make_tensor
+from onnx import TensorProto
 
 from tvm2onnx import package_utils, relay_model, relay_model_runtime
 from tvm2onnx.error import PackagingError
@@ -381,12 +382,30 @@ class ONNXRuntimeTVMPackage:
             output_tensors.append(tensor)
             output_names.append(output.name)
 
+        # Test to see if we can pass arbitrary data through ort as a constant
+        test_string = "Hello World!"
+        hello_world_data = bytes(test_string, 'utf-8')
+
+        hello_world = make_node(
+            "Constant",
+            inputs=[],
+            outputs=["c1"],
+            name="hello_world_data",
+            value=make_tensor(
+                name="hello_world",
+                data_type=TensorProto.INT8,
+                dims=[len(hello_world_data)],
+                vals=hello_world_data,
+                raw=True,
+            ),
+        )
+
         custom_op = make_node(
             self.custom_op_name, input_names, output_names, domain="octoml.customop"
         )
 
         graph = make_graph(
-            nodes=[custom_op],
+            nodes=[custom_op, hello_world],
             name="tvm_ort",
             inputs=input_tensors,
             outputs=output_tensors,
@@ -401,6 +420,7 @@ class ONNXRuntimeTVMPackage:
             convert_attribute=True,
         )
         onnx.save(onnx_model, os.path.join(out_dir, f"{self._model_name}.onnx"))
+        onnx.save(onnx_model, "hello_world.onnx")
 
     def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
         """Builds the ONNX file and returns the path to the package.
