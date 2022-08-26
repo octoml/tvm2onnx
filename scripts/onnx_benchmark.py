@@ -85,11 +85,6 @@ def _do_benchmark(
         result = engine.run(output_names=None, input_feed=input_data)
         print(result)
 
-        # results = onnx_model.measure_via_onnx_trt(
-        #     num_trials=10, num_runs_per_trial=10, warmup_ms=0, cooldown_ms=0
-        # )
-        # print(f"Benchmark mean {results.latency_mean_ms}")
-
 
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Package model to a TVM onnx file.")

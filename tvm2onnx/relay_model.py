@@ -19,7 +19,7 @@ from typing import Optional
 
 import structlog
 import tvm
-from tvm import auto_scheduler, autotvm, relay, rpc, target
+from tvm import auto_scheduler, autotvm, relay, target
 from tvm.contrib import cc
 from tvm.relay import vm
 from tvm.runtime import vm as vm_rt
@@ -29,7 +29,7 @@ from tvm.utils import roofline
 from tvm2onnx import relay_model_runtime, relay_serializer
 from tvm2onnx.error import TVM2ONNXError
 from tvm2onnx.inputs import InputDtypes, InputShapes
-from tvm2onnx.model_base import BenchmarkResult, ModelArgument, ModelBase
+from tvm2onnx.model_base import ModelArgument, ModelBase
 from tvm2onnx.tuning_records import (
     RecordType,
     TuningRecordsType,
@@ -439,76 +439,6 @@ class RelayModel(ModelBase):
                 tar.add(lib_path, arcname=library_name)
 
         return compile_s
-
-    def measure_via_relay_vm(
-        self,
-        num_trials: int,
-        num_runs_per_trial: int,
-        warmup_ms: int,
-        cooldown_ms: int,
-        tvm_num_threads: int,
-        tvm_target: str,
-        rpc_session: rpc.RPCSession,
-        tvm_target_host: typing.Optional[str] = None,
-        opt_level: int = _RELAY_OPT_LEVEL,
-        max_time_ms: int = 0,
-        min_time_ms: int = 0,
-    ) -> BenchmarkResult:
-        """Measure the overall iteration time for the Relay model.
-
-        :param num_trials: the number of trails of inference to run.
-        :param num_runs_per_trial: the number of inferences per trial.
-        :param warmup_ms: how many milliseconds to warmup for before measurement.
-        :param cooldown_ms: how many milliseconds to cool down for after measurement.
-        :param tvm_num_threads: the number of threads TVM will use.
-        :param tvm_target: the target string to pass to TVM.
-        :param rpc_session: the TVM rpc session to use for this measurement.
-        :param tvm_target_host: the target host string to use if cross compiling
-        :param opt_level: the Relay optimization level to use for this measurement.
-        :param max_time_ms: Maximum benchmark time in milleseconds (zero implies no limit)
-        :param min_time_ms: Minimum benchmark time in milleseconds (zero implies no minimum)
-
-        :return: The results of the benchmark
-        """
-        LOG.info(
-            "Begin measure_via_relay_vm",
-            num_trials=num_trials,
-            num_runs_per_trial=num_runs_per_trial,
-            warmup_ms=warmup_ms,
-            cooldown_ms=cooldown_ms,
-            tvm_num_threads=tvm_num_threads,
-            tvm_target=tvm_target,
-            opt_level=opt_level,
-        )
-
-        with tempfile.NamedTemporaryFile() as path:
-            self.create_library_file(
-                path.name,
-                tvm_target,
-                tvm_target_host,
-                opt_level,
-            )
-            with open(path.name, "rb") as f:
-                library_bytes = f.read()
-
-            result, _ = relay_model_runtime.measure_buffer_relay_vm(
-                binary_blob=library_bytes,
-                input_shapes=self.input_shapes,
-                input_dtypes=self.input_dtypes,
-                num_trials=num_trials,
-                num_runs_per_trial=num_runs_per_trial,
-                warmup_ms=warmup_ms,
-                cooldown_ms=cooldown_ms,
-                tvm_num_threads=tvm_num_threads,
-                tvm_target=tvm_target,
-                rpc_session=rpc_session,
-                enable_profiler=False,
-                max_time_ms=max_time_ms,
-                min_time_ms=min_time_ms,
-            )
-
-        LOG.info("Measure result", result=result)
-        return result
 
     def model_has_quantized_operators(self):
         # This hack returns whether the model is quantized, defined here
