@@ -1,6 +1,7 @@
 import os
 
 import structlog
+import typing
 
 from tvm2onnx.error import TVM2ONNXError
 
@@ -50,8 +51,15 @@ def get_tvm_revision_hash() -> str:
 
 
 def print_path_contents(dir_root):
+    for path in get_path_contents(dir_root):
+        print(path)
+
+
+def get_path_contents(dir_root) ->typing.List[str]:
+    contents = []
     for lists in os.listdir(dir_root):
         path = os.path.join(dir_root, lists)
-        print(path)
+        contents.append(path)
         if os.path.isdir(path):
-            print_path_contents(path)
+            contents.extend(get_path_contents(path))
+    return contents

@@ -9,19 +9,25 @@ import subprocess
 import tarfile
 import typing
 import uuid
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import onnx
 import structlog
 import tvm
-from onnx import numpy_helper
+from onnx import TensorProto, numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
-from onnx.helper import make_graph, make_model, make_node, make_tensor_value_info, make_tensor
-from onnx import TensorProto
+from onnx.helper import (
+    make_graph,
+    make_model,
+    make_node,
+    make_tensor,
+    make_tensor_value_info,
+)
 
 from tvm2onnx import package_utils, relay_model, relay_model_runtime
 from tvm2onnx.error import PackagingError
-from tvm2onnx.utils import print_path_contents
+from tvm2onnx.utils import print_path_contents, get_path_contents
 
 LOG = structlog.get_logger(__name__)
 
@@ -357,14 +363,11 @@ class ONNXRuntimeTVMPackage:
         """
         self._build_vm(model=model, out_dir=out_dir)
 
-        constants = self._load_late_bound_constants(os.path.join(out_dir, "consts"))
-        print_path_contents(out_dir)
-        print(constants)
-
         input_tensors = []
         input_names = []
         initializers = []
         for name in model.input_dtypes.keys():
+            print(f"********************************* input {name}")
             shape = model.input_shapes[name]
             dtype = model.input_dtypes[name]
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
@@ -382,30 +385,35 @@ class ONNXRuntimeTVMPackage:
             output_tensors.append(tensor)
             output_names.append(output.name)
 
-        # Test to see if we can pass arbitrary data through ort as a constant
-        test_string = "Hello World!"
-        hello_world_data = bytes(test_string, 'utf-8')
-
-        hello_world = make_node(
-            "Constant",
-            inputs=[],
-            outputs=["c1"],
-            name="hello_world_data",
-            value=make_tensor(
-                name="hello_world",
-                data_type=TensorProto.INT8,
-                dims=[len(hello_world_data)],
-                vals=hello_world_data,
-                raw=True,
-            ),
-        )
+        constants = self._load_late_bound_constants(os.path.join(out_dir, "consts"))
+        # print_path_contents(out_dir)
+        # print(constants)
+        graph_nodes = []
+        for name, data in constants.items():
+            constant_node = make_node(
+                "Constant",
+                inputs=[],
+                outputs=[name],
+                name=name + "_const_data",
+                value=make_tensor(
+                    name=name + "_tensor",
+                    data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[data.dtype],
+                    dims=data.shape,
+                    vals=data.flatten().tobytes(),
+                    raw=True,
+                ),
+            )
+            graph_nodes.append(constant_node)
+            # input_tensors.append(constant_node)
+            input_names.append(name)
 
         custom_op = make_node(
             self.custom_op_name, input_names, output_names, domain="octoml.customop"
         )
+        graph_nodes.append(custom_op)
 
         graph = make_graph(
-            nodes=[custom_op, hello_world],
+            nodes=graph_nodes,
             name="tvm_ort",
             inputs=input_tensors,
             outputs=output_tensors,
@@ -419,8 +427,23 @@ class ONNXRuntimeTVMPackage:
             size_threshold=1024,
             convert_attribute=True,
         )
-        onnx.save(onnx_model, os.path.join(out_dir, f"{self._model_name}.onnx"))
-        onnx.save(onnx_model, "hello_world.onnx")
+        with TemporaryDirectory() as onnx_save_dir:
+            onnx_save_file = os.path.join(onnx_save_dir, f"{self._model_name}.onnx")
+            onnx_archive = os.path.join(onnx_save_dir, f"{self._model_name}.onnx")
+            onnx.save(
+                proto=onnx_model,
+                f=onnx_save_file,
+                save_as_external_data=True,
+                all_tensors_to_one_file=False,
+                size_threshold=1024,
+            )
+            with tarfile.open(onnx_archive, "w") as onnx_tar:
+                for file in get_path_contents(onnx_save_dir):
+                    print(f"Add file {file}")
+                    onnx_tar.add(file)
+            # print(onnx_save_dir)
+            # print_path_contents(onnx_save_dir)
+            breakpoint()
 
     def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
         """Builds the ONNX file and returns the path to the package.

@@ -137,7 +137,7 @@ def test_constant_model():
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, uniform=True
+            model_dir=tdir, input_shape=input_shape, uniform=False
         )
         c1_data, c2_data = add_constant_onnx_model(model_dir=tdir, input_shape=input_shape, uniform=True)
         onnx_model = ONNXModel.from_file(model_path)
@@ -149,6 +149,7 @@ def test_constant_model():
             tvm_target="llvm",
             output_path=onnx_path,
         )
+        shutil.copy(onnx_path, "constant.tvm.onnx")
         model_dir = os.path.join(tdir, "model")
         shutil.copy(onnx_path, "/usr/constants.tvm.onnx")
         with tarfile.open(onnx_path, "r") as tar:
