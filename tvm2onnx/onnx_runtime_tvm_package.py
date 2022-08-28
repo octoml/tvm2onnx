@@ -353,21 +353,42 @@ class ONNXRuntimeTVMPackage:
                 constants[names[i]] = array
         return constants
 
-    def _export_model(self, model: relay_model.RelayModel, out_dir: pathlib.Path):
+    def build_package(self, model: relay_model.RelayModel, build_dir: pathlib.Path) -> pathlib.Path:
         """Exports the relay model as an onnx model where the relay model is
         represented as a single onnx custom operator. Constants are exported as
         onnx protobuf files.
 
         :param model: the relay model to export.
-        :param out_dir: path to the directory to put output in.
+        :param build_dir: path to the directory to put output in.
         """
-        self._build_vm(model=model, out_dir=out_dir)
+        self._build_vm(model=model, out_dir=build_dir)
+
+        """Builds the ONNX file and returns the path to the pacwwkage.
+
+        :param module_name: string of the module to build a package around.
+        :param build_dir: path to the build directory.
+        :return: path of the generated package.
+        """
+        source = os.path.join(build_dir, "custom_op_library_source")
+        target = os.path.join(build_dir)
+        shutil.move(os.path.join(source, "custom_op_library.cc"), target)
+        shutil.move(os.path.join(source, "custom_op_library.h"), target)
+        shutil.move(os.path.join(source, "Makefile"), target)
+        make_dir = build_dir
+        custom_op_name = f"custom_{self._model_name}.so"
+        shutil.copy(
+            os.path.join(build_dir, f"{self._model_name}.so"),
+            os.path.join(build_dir, "model.so"),
+        )
+        result = subprocess.run(["make"], capture_output=True, cwd=make_dir)
+        if not result.returncode == 0:
+            err = result.stderr.decode("utf-8").replace(r"\n", "\n")
+            raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
 
         input_tensors = []
         input_names = []
         initializers = []
         for name in model.input_dtypes.keys():
-            print(f"********************************* input {name}")
             shape = model.input_shapes[name]
             dtype = model.input_dtypes[name]
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
@@ -385,8 +406,8 @@ class ONNXRuntimeTVMPackage:
             output_tensors.append(tensor)
             output_names.append(output.name)
 
-        constants = self._load_late_bound_constants(os.path.join(out_dir, "consts"))
-        # print_path_contents(out_dir)
+        constants = self._load_late_bound_constants(os.path.join(build_dir, "consts"))
+        # print_path_contents(build_dir)
         # print(constants)
         graph_nodes = []
         for name, data in constants.items():
@@ -427,62 +448,27 @@ class ONNXRuntimeTVMPackage:
             size_threshold=1024,
             convert_attribute=True,
         )
+        # onnx_save_dir is the directory where the .onnx model file along with any
+        # external constants files are written. There may be multiple files here
+        # with unknown names but they all belong in the output file.
         with TemporaryDirectory() as onnx_save_dir:
-            onnx_save_file = os.path.join(onnx_save_dir, f"{self._model_name}.onnx")
-            onnx_archive = os.path.join(onnx_save_dir, f"{self._model_name}.onnx")
+            onnx_model_file = os.path.join(onnx_save_dir, f"{self._model_name}.onnx")
+            onnx_archive = os.path.join(build_dir, f"{self._model_name}.onnx.tar")
             onnx.save(
                 proto=onnx_model,
-                f=onnx_save_file,
+                f=onnx_model_file,
                 save_as_external_data=True,
                 all_tensors_to_one_file=False,
                 size_threshold=1024,
             )
             with tarfile.open(onnx_archive, "w") as onnx_tar:
                 for file in get_path_contents(onnx_save_dir):
-                    print(f"Add file {file}")
-                    onnx_tar.add(file)
-            # print(onnx_save_dir)
-            # print_path_contents(onnx_save_dir)
-            breakpoint()
+                    print(f"Add file {os.path.join(onnx_save_dir, file)}")
+                    onnx_tar.add(os.path.join(onnx_save_dir, file), file)
+                onnx_tar.add(os.path.join(build_dir, custom_op_name), custom_op_name)
 
-    def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
-        """Builds the ONNX file and returns the path to the package.
-
-        :param module_name: string of the module to build a package around.
-        :param build_dir: path to the build directory.
-        :return: path of the generated package.
-        """
-        LOG.info("Begin building ONNX package", build_dir=build_dir)
-        source = os.path.join(build_dir, "custom_op_library_source")
-        target = os.path.join(build_dir)
-        shutil.move(os.path.join(source, "custom_op_library.cc"), target)
-        shutil.move(os.path.join(source, "custom_op_library.h"), target)
-        shutil.move(os.path.join(source, "Makefile"), target)
-        make_dir = build_dir
-        custom_op_name = f"custom_{self._model_name}.so"
-        shutil.copy(
-            os.path.join(build_dir, f"{self._model_name}.so"),
-            os.path.join(build_dir, "model.so"),
-        )
-        result = subprocess.run(["make"], capture_output=True, cwd=make_dir)
-        if not result.returncode == 0:
-            err = result.stderr.decode("utf-8").replace(r"\n", "\n")
-            raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
-
-        files = [
-            "consts",
-            custom_op_name,
-        ]
-
-        files.append(f"{self._model_name}.onnx")
-
-        onnx_path = os.path.join(build_dir, "$tempfile$.onnx")
-        if os.path.exists(onnx_path):
-            os.remove(onnx_path)
-        with tarfile.open(onnx_path, "w") as model_tar:
-            for file in files:
-                model_tar.add(os.path.join(build_dir, file), file)
-        return onnx_path
+            print(onnx_archive)
+            return onnx_archive
 
     def build(self, model: relay_model.RelayModel) -> pathlib.Path:
         """Packages the given model.
@@ -501,8 +487,8 @@ class ONNXRuntimeTVMPackage:
         )
         cc_config = self.cookiecutter_config(model)
         self._create_from_template(cc_config, self._build_dir)
-        self._export_model(model=model, out_dir=self._build_dir)
-        package_path = self.build_package(self._build_dir)
+        # self._export_model(model=model, build_dir=self._build_dir)
+        package_path = self.build_package(model=model, build_dir=self._build_dir)
         LOG.info("Package complete", package_path=package_path)
         return package_path
 
