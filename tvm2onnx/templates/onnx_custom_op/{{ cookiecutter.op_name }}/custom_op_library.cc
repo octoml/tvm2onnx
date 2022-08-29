@@ -103,49 +103,49 @@ struct TVMRuntime {
     std::stringstream ss;
     ss.write((const char*)&vm_exec_code_ro_start, vm_exec_code_ro_size);
 
-    // exec_mod = tvm::runtime::vm::Executable::Load(ss.str(), lib);
-    // const tvm::runtime::vm::Executable* tmp =
-    //     exec_mod.as<tvm::runtime::vm::Executable>();
-    // exec = tvm::runtime::GetObjectPtr<tvm::runtime::vm::Executable>(
-    //     const_cast<tvm::runtime::vm::Executable*>(tmp));
-    // // exec->LoadLateBoundConstantsFromFile(path+consts_path);
-    // vm.LoadExecutable(exec);
+    exec_mod = tvm::runtime::vm::Executable::Load(ss.str(), lib);
+    const tvm::runtime::vm::Executable* tmp =
+        exec_mod.as<tvm::runtime::vm::Executable>();
+    exec = tvm::runtime::GetObjectPtr<tvm::runtime::vm::Executable>(
+        const_cast<tvm::runtime::vm::Executable*>(tmp));
+    exec->LoadLateBoundConstantsFromFile(path+consts_path);
+    vm.LoadExecutable(exec);
 
-    // // Initialize the VM for the specified device. If the device is not a CPU,
-    // // We'll need to add a CPU context to drive it.
-    // int arity;
-    // if (dl_device_type == kDLCPU) {
-    //   arity = 3;
-    // } else {
-    //   arity = 6;
-    // }
-    // // Specify how to allocate memory for the target devices.
-    // uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
-    // // TODO: rkimball use proper device
-    // uint64_t device_id = 0;
-    // // Create a variable length input to the packed function.
-    // std::vector<TVMValue> init_vals(arity);
-    // std::vector<int> codes(arity);
-    // tvm::runtime::TVMArgsSetter setter(init_vals.data(), codes.data());
-    // // Set up the main device context.
-    // setter(0, (uint64_t(dl_device_type)));
-    // setter(1, device_id);
-    // setter(2, alloc_type);
-    // // Also initialize a CPU device context.
-    // if (dl_device_type != kDLCPU) {
-    //   setter(3, (uint64_t(kDLCPU)));
-    //   setter(4, device_id);
-    //   setter(5, alloc_type);
-    // }
-    // tvm::runtime::TVMRetValue rv;
-    // // Call the packed func with the init arguments.
-    // vm.GetFunction("init", nullptr)
-    //     .CallPacked(
-    //         tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
+    // Initialize the VM for the specified device. If the device is not a CPU,
+    // We'll need to add a CPU context to drive it.
+    int arity;
+    if (dl_device_type == kDLCPU) {
+      arity = 3;
+    } else {
+      arity = 6;
+    }
+    // Specify how to allocate memory for the target devices.
+    uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
+    // TODO: rkimball use proper device
+    uint64_t device_id = 0;
+    // Create a variable length input to the packed function.
+    std::vector<TVMValue> init_vals(arity);
+    std::vector<int> codes(arity);
+    tvm::runtime::TVMArgsSetter setter(init_vals.data(), codes.data());
+    // Set up the main device context.
+    setter(0, (uint64_t(dl_device_type)));
+    setter(1, device_id);
+    setter(2, alloc_type);
+    // Also initialize a CPU device context.
+    if (dl_device_type != kDLCPU) {
+      setter(3, (uint64_t(kDLCPU)));
+      setter(4, device_id);
+      setter(5, alloc_type);
+    }
+    tvm::runtime::TVMRetValue rv;
+    // Call the packed func with the init arguments.
+    vm.GetFunction("init", nullptr)
+        .CallPacked(
+            tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
 
-    // set_input_func = vm.GetFunction("set_input", nullptr);
-    // get_output_func = vm.GetFunction("get_output", nullptr);
-    // run_func = vm.GetFunction("invoke", nullptr);
+    set_input_func = vm.GetFunction("set_input", nullptr);
+    get_output_func = vm.GetFunction("get_output", nullptr);
+    run_func = vm.GetFunction("invoke", nullptr);
   }
 
   ~TVMRuntime() {
