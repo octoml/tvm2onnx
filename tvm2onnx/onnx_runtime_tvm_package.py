@@ -386,27 +386,17 @@ class ONNXRuntimeTVMPackage:
         graph_nodes = []
         custom_op_input_names = []
 
-        self._build_vm(model=model, out_dir=build_dir)
+        constants = self._build_vm(model=model, out_dir=build_dir)
 
-        constants = self._load_late_bound_constants(os.path.join(build_dir, "consts"))
         for name, data in constants.items():
+            np_data = data.numpy()
             constant_tensor=make_tensor(
                 name=name,
-                data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[data.dtype],
-                dims=data.shape,
-                vals=data.flatten().tobytes(),
+                data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np_data.dtype],
+                dims=np_data.shape,
+                vals=np_data.flatten().tobytes(),
                 raw=True,
             )
-            # constant_node = make_node(
-            #     "Constant",
-            #     inputs=[],
-            #     outputs=[name],
-            #     name=name + "_const_data",
-            #     value=constant_tensor,
-            # )
-
-            # graph_nodes.append(constant_node)
-            # input_tensors.append(constant_node)
             custom_op_input_names.append(name)
             initializers.append(constant_tensor)
 
@@ -538,13 +528,10 @@ class ONNXRuntimeTVMPackage:
             self._relay_opt_level,
         )
 
-        # Save consts separately. This is done to support very large models which
-        # can't be compiled to a single binary, and there is no harm in doing it
-        # for smaller models as well.
-        consts_path = str(out_dir / relay_model_runtime.RELAY_VM_CONSTS_NAME)
-        vm_exec.move_late_bound_consts(
-            consts_path, byte_limit=relay_model_runtime.RELAY_VM_LARGE_CONST_BYTE_LIMIT
-        )
+        # This call replaces the call to move_late_bound_consts. We aren't saving the
+        # constants in TVM's format, we are saving them as part of the onnx model in
+        # onnx protobuf format.
+        constant_map = vm_exec.get_late_bound_consts(1024)
 
         # Save vm exec code bytes.
         vm_exec_code, mod = vm_exec.save()
@@ -558,3 +545,5 @@ class ONNXRuntimeTVMPackage:
 
         # Save module.
         mod.export_library(mod_path, fcompile=tvm_build_func)
+
+        return constant_map
