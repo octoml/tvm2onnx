@@ -222,7 +222,7 @@ class ONNXRuntimeTVMPackage:
         # All constants are first with the inputs following.
         index = 0
         for initializer in initializer_tensors:
-            var_name = f"initializer_{index}"
+            var_name = initializer.name
             dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
             idict = _emit_element(index, var_name, initializer.dims, dtype)
             initializers.append(idict)
@@ -416,11 +416,11 @@ class ONNXRuntimeTVMPackage:
         )
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:
             print(f.read())
-        result = subprocess.run(["make"], capture_output=True, cwd=make_dir)
+        result = subprocess.run(["make"], capture_output=True, cwd=make_dir, text=True)
         if not result.returncode == 0:
-            err = result.stderr.decode("utf-8").replace("\\n", "\n")
-            breakpoint()
-            print(err)
+            err = result.stderr
+            for line in err.splitlines():
+                print(line)
             raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
 
         for name in model.input_dtypes.keys():
