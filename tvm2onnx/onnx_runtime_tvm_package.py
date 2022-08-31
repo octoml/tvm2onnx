@@ -18,15 +18,15 @@ import tvm
 from onnx import numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
+    TensorProto,
     make_graph,
     make_model,
     make_node,
     make_tensor,
     make_tensor_value_info,
-    TensorProto,
 )
 
-from tvm2onnx import package_utils, relay_model, relay_model_runtime
+from tvm2onnx import package_utils, relay_model
 from tvm2onnx.error import PackagingError
 from tvm2onnx.utils import get_path_contents
 
@@ -186,7 +186,9 @@ class ONNXRuntimeTVMPackage:
         return output_details
 
     def cookiecutter_config(
-        self, model: relay_model.RelayModel, initializer_tensors: typing.List[TensorProto]
+        self,
+        model: relay_model.RelayModel,
+        initializer_tensors: typing.List[TensorProto],
     ) -> typing.Dict[str, typing.Any]:
         """Gets the cookiecutter config for the ONNX package template.
 
@@ -303,72 +305,6 @@ class ONNXRuntimeTVMPackage:
             with open(target, "w") as out:
                 out.write(content)
 
-    def _load_late_bound_constants(self, consts_path):
-        """This function is horrific. This is the only way I can get constants from
-        tvm. All I can say is that it works."""
-        # https://docs.python.org/3/library/struct.html
-        import ctypes
-        import struct
-
-        kTVMNDArrayListMagic = int(hex(0xF7E58D4F05049CB7), 16)
-        kTVMNDArrayMagic = int(hex(0xDD5E40F096B4A13F), 16)
-
-        class DLDataType(ctypes.Structure):
-            TYPE_MAP = {
-                (1, 1, 1): "bool",
-                (0, 32, 1): "int32",
-                (0, 64, 1): "int64",
-                (1, 32, 1): "uint32",
-                (1, 64, 1): "uint64",
-                (2, 32, 1): "float32",
-                (2, 64, 1): "float64",
-            }
-
-        constants = {}
-        names = []
-        with open(consts_path, "rb") as f:
-            magic = struct.unpack("Q", f.read(8))[0]
-            if magic != kTVMNDArrayListMagic:
-                raise PackagingError("No magic in consts file")
-            reserved = struct.unpack("Q", f.read(8))[0]
-            # std::vector<std::string> names;
-            # ICHECK(strm->Read(&names)) << "Invalid parameters file format";
-            name_count = struct.unpack("Q", f.read(8))[0]
-            for i in range(name_count):
-                name_length = struct.unpack("Q", f.read(8))[0]
-                name = f.read(name_length).decode("utf-8")
-                print(f"name[{i}] = {name}")
-                names.append(name)
-            data_count = struct.unpack("Q", f.read(8))[0]
-            for i in range(data_count):
-                magic = struct.unpack("Q", f.read(8))[0]
-                if magic != kTVMNDArrayMagic:
-                    raise PackagingError("Data not array")
-                print("ndarray")
-                reserved = struct.unpack("Q", f.read(8))[0]
-                f.read(reserved)  # skip reserved space
-                # DLDevice device;
-                device_type = struct.unpack("I", f.read(4))[0]
-                device_id = struct.unpack("I", f.read(4))[0]
-                print(f"device type {device_type}[{device_id}]")
-                # int ndim
-                ndim = struct.unpack("I", f.read(4))[0]
-                # DLDataType dtype;
-                dtype_code = struct.unpack("B", f.read(1))[0]
-                dtype_bits = struct.unpack("B", f.read(1))[0]
-                dtype_lanes = struct.unpack("H", f.read(2))[0]
-                shape = []
-                for dim in range(ndim):
-                    axis = struct.unpack("Q", f.read(8))[0]
-                    shape.append(axis)
-                data_byte_size = struct.unpack("Q", f.read(8))[0]
-                data = f.read(data_byte_size)
-                dtype_str = (dtype_code, dtype_bits, dtype_lanes)
-                dtype = DLDataType.TYPE_MAP[dtype_str]
-                array = np.ndarray(shape=shape, dtype=dtype, buffer=data)
-                constants[names[i]] = array
-        return constants
-
     def build_package(
         self, model: relay_model.RelayModel, build_dir: pathlib.Path
     ) -> pathlib.Path:
@@ -390,7 +326,7 @@ class ONNXRuntimeTVMPackage:
 
         for name, data in constants.items():
             np_data = data.numpy()
-            constant_tensor=make_tensor(
+            constant_tensor = make_tensor(
                 name=name,
                 data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np_data.dtype],
                 dims=np_data.shape,
@@ -415,12 +351,11 @@ class ONNXRuntimeTVMPackage:
             os.path.join(build_dir, "model.so"),
         )
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:
-            print(f.read())
+            LOG.debug("custom op library generated", code=f.read())
         result = subprocess.run(["make"], capture_output=True, cwd=make_dir, text=True)
         if not result.returncode == 0:
             err = result.stderr
-            for line in err.splitlines():
-                print(line)
+            LOG.exception("Error compiling custom op library", output=err)
             raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
 
         for name in model.input_dtypes.keys():
@@ -439,10 +374,11 @@ class ONNXRuntimeTVMPackage:
             output_tensors.append(tensor)
             output_names.append(output.name)
 
-        for name in custom_op_input_names:
-            print(f"custom op input {name}")
         custom_op = make_node(
-            self.custom_op_name, custom_op_input_names, output_names, domain="octoml.customop"
+            self.custom_op_name,
+            custom_op_input_names,
+            output_names,
+            domain="octoml.customop",
         )
         graph_nodes.append(custom_op)
 
@@ -474,14 +410,11 @@ class ONNXRuntimeTVMPackage:
                 all_tensors_to_one_file=False,
                 size_threshold=1024,
             )
-            shutil.copy(onnx_model_file, "model.onnx")
             with tarfile.open(onnx_archive, "w") as onnx_tar:
                 for file in get_path_contents(onnx_save_dir):
-                    print(f"Add file {os.path.join(onnx_save_dir, file)}")
                     onnx_tar.add(os.path.join(onnx_save_dir, file), file)
                 onnx_tar.add(os.path.join(build_dir, custom_op_name), custom_op_name)
 
-            print(onnx_archive)
             return onnx_archive
 
     def build(self, model: relay_model.RelayModel) -> pathlib.Path:

@@ -91,8 +91,6 @@ struct TVMRuntime {
     std::string consts_path = "{{ cookiecutter.consts_name }}";
     DLDeviceType dl_device_type = {{ cookiecutter.dl_device_type }};
 
-    std::string path = get_this_directory();
-
     // TVM's model shared library needs to be a standalone shared lib
     std::ofstream model_so_f(model_so_file.filename, std::ios::binary);
     model_so_f.write(model_so_start, model_so_size);
@@ -108,73 +106,14 @@ struct TVMRuntime {
         exec_mod.as<tvm::runtime::vm::Executable>();
     exec = tvm::runtime::GetObjectPtr<tvm::runtime::vm::Executable>(
         const_cast<tvm::runtime::vm::Executable*>(tmp));
-
-    // exec->LoadLateBoundConstantsFromFile(path+consts_path);
-    // vm.LoadExecutable(exec);
-
-    // // Initialize the VM for the specified device. If the device is not a CPU,
-    // // We'll need to add a CPU context to drive it.
-    // int arity;
-    // if (dl_device_type == kDLCPU) {
-    //   arity = 3;
-    // } else {
-    //   arity = 6;
-    // }
-    // // Specify how to allocate memory for the target devices.
-    // uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
-    // // TODO: rkimball use proper device
-    // uint64_t device_id = 0;
-    // // Create a variable length input to the packed function.
-    // std::vector<TVMValue> init_vals(arity);
-    // std::vector<int> codes(arity);
-    // tvm::runtime::TVMArgsSetter setter(init_vals.data(), codes.data());
-    // // Set up the main device context.
-    // setter(0, (uint64_t(dl_device_type)));
-    // setter(1, device_id);
-    // setter(2, alloc_type);
-    // // Also initialize a CPU device context.
-    // if (dl_device_type != kDLCPU) {
-    //   setter(3, (uint64_t(kDLCPU)));
-    //   setter(4, device_id);
-    //   setter(5, alloc_type);
-    // }
-    // tvm::runtime::TVMRetValue rv;
-    // // Call the packed func with the init arguments.
-    // vm.GetFunction("init", nullptr)
-    //     .CallPacked(
-    //         tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
-
-    // set_input_func = vm.GetFunction("set_input", nullptr);
-    // get_output_func = vm.GetFunction("get_output", nullptr);
-    // run_func = vm.GetFunction("invoke", nullptr);
   }
 
   ~TVMRuntime() {
   }
 
-  std::string get_this_directory() {
-    // In order to know the paths to the above files we need to first know the path
-    // of the currently running shared library. All of the other files are located
-    // in that same directory.
-    // This only works on linux.
-    std::string custom_op_lib = "custom_{{ cookiecutter.module_name }}.so";
-    std::ifstream f("/proc/self/maps");
-    std::string line;
-    std::smatch m;
-    std::string path;
-    std::regex reg("([\\S]+)"+custom_op_lib);
-    for (std::string line; std::getline(f, line); ) {
-      if (std::regex_search(line, m, reg)) {
-        path = m[1];
-        break;
-      }
-    }
-    return path;
-  }
-
   void LateBoundConstants(OrtKernelContext* context) {
     DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
-    // ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
+    ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
 
     {% for details in cookiecutter.initializers -%}
     const OrtValue* _{{details.name}} = ort_.KernelContext_GetInput(context, {{details.index}});
@@ -182,25 +121,16 @@ struct TVMRuntime {
     DLDataType _{{details.name}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
     ::tvm::runtime::NDArray _{{details.name}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device_type);
     _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
-    // const_map.Set("{{details.name}}", _{{details.name}}_ndarray);
+    const_map.Set("{{details.name}}", _{{details.name}}_ndarray);
 
     {% endfor %}
-
-    ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map = {
-    {% for details in cookiecutter.initializers -%}
-      {"{{details.name}}", _{{details.name}}_ndarray},
-    {% endfor %}
-    };
 
     // We can't LoadExecutable util we have added late-bound constants so the actual creation
-    // of loading takes place here
+    // of loading takes place here.
     // void Executable::LoadLateBoundConstantsFromMap(Map<String, NDArray> map)
     // ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> runtime_map(const_map);
-    std::cout << __FILE__ << " " << __LINE__ << "********************** " << std::endl;
     exec->LoadLateBoundConstantsFromMap(const_map);
-    std::cout << __FILE__ << " " << __LINE__ << "********************** " << std::endl;
     vm.LoadExecutable(exec);
-    std::cout << __FILE__ << " " << __LINE__ << "********************** " << std::endl;
 
     // Initialize the VM for the specified device. If the device is not a CPU,
     // We'll need to add a CPU context to drive it.
@@ -244,6 +174,8 @@ struct TVMRuntime {
     DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
 
     if (!constants_bound) {
+      // During the first iteration we need to bind the late-bound constants to TVM and
+      // create the VM. This is our first opportunity to access the onnx external constants.
       LateBoundConstants(context);
       constants_bound = true;
     }
@@ -333,7 +265,6 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
   size_t GetInputTypeCount() const { return {{cookiecutter.input_count}} + {{cookiecutter.initializer_count}}; };
   ONNXTensorElementDataType GetInputType(size_t index) const {
     static std::vector<ONNXTensorElementDataType> input_types = {{cookiecutter.input_types}};
-    std::cout << "get input type " << index << std::endl;
     return input_types[index];
   };
 
