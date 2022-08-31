@@ -137,9 +137,8 @@ def test_constant_model():
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, uniform=False
+            model_dir=tdir, input_shape=input_shape, uniform=True
         )
-        c1_data, c2_data = add_constant_onnx_model(model_dir=tdir, input_shape=input_shape, uniform=True)
         onnx_model = ONNXModel.from_file(model_path)
         onnx_model.infer_and_update_inputs()
         relay_model = onnx_model.to_relay()
