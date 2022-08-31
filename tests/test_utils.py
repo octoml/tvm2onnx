@@ -91,3 +91,10 @@ def perf_test(run, iters_number = 1000, model_name = "ResNet50-v1", framework_na
     toc = time.perf_counter()
     dur_ms = 1000*(toc - tic) / iters_number
     print(f"Averaged time: {dur_ms:0.4f} milliseconds for {iters_number} iterations of inference of {model_name} model by {framework_name}")
+
+def compare_outputs(actual, desired, rtol=5e-5, atol=5e-5):
+    actual = np.asanyarray(actual)
+    desired = np.asanyarray(desired)
+    assert actual.dtype == desired.dtype
+    np.testing.assert_allclose(actual.shape, desired.shape)
+    np.testing.assert_allclose(actual, desired, rtol=rtol, atol=atol, verbose=True)

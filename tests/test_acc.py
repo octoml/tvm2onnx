@@ -1,19 +1,19 @@
 """
-Performance test of Pure ONNX Runtime and ONNX Runtime with TVM inside custom op
+Accuracy test. Results (output tensors) from Pure ONNX Runtime and ONNX Runtime with TVM inside custom op are compared
 """
 
 import argparse
-from functools import partial
 import logging
 
 import tempfile
 
 from test_utils import (
+    compare_outputs,
     unpack_onnx_tar,
     generate_input_shapes_dtypes,
     generate_input_data,
     get_ort_inference_session,
-    perf_test,
+    compare_outputs,
 )
 
 logging.basicConfig(level=logging.CRITICAL)
@@ -22,7 +22,6 @@ logging.basicConfig(level=logging.CRITICAL)
 def test_benchmark(
     model_path,
 ):
-    benchmark_test = partial(perf_test, iters_number = 1000, model_name = "test model")
     with tempfile.TemporaryDirectory() as tmp:
         onnx_path, custom_op_libs = unpack_onnx_tar(model_path, tmp)
 
@@ -31,19 +30,19 @@ def test_benchmark(
         
         # ORT with custom op
         engine = get_ort_inference_session(onnx_path, custom_op_libs)
-        ort_runner = partial(engine.run, output_names=None, input_feed=input_data)
-
-        benchmark_test(ort_runner, framework_name = "ONNX Runtime with Custom Op")
+        custom_ort_result = engine.run(output_names=None, input_feed=input_data)
         
         # pure ORT
         engine = get_ort_inference_session(onnx_path)
-        ort_runner = partial(engine.run, output_names=None, input_feed=input_data)
-
-        benchmark_test(ort_runner, framework_name = "Pure ONNX Runtime")
+        pure_ort_result = engine.run(output_names=None, input_feed=input_data)
+        
+        # Comparison
+        for c_arr, p_arr in zip(custom_ort_result, pure_ort_result):
+            compare_outputs(c_arr, p_arr)
 
 
 def main():  # pragma: no cover
-    parser = argparse.ArgumentParser(description="Performance test.")
+    parser = argparse.ArgumentParser(description="Accuracy test.")
     parser.add_argument(
         "--model",
         required=True,
