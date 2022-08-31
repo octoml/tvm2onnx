@@ -174,7 +174,7 @@ struct TVMRuntime {
 
   void LateBoundConstants(OrtKernelContext* context) {
     DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
-    ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
+    // ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
 
     {% for details in cookiecutter.initializers -%}
     const OrtValue* _{{details.name}} = ort_.KernelContext_GetInput(context, {{details.index}});
@@ -182,52 +182,61 @@ struct TVMRuntime {
     DLDataType _{{details.name}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
     ::tvm::runtime::NDArray _{{details.name}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device_type);
     _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
-    const_map.Set("{{details.name}}", _{{details.name}}_ndarray);
+    // const_map.Set("{{details.name}}", _{{details.name}}_ndarray);
 
     {% endfor %}
+
+    ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map = {
+    {% for details in cookiecutter.initializers -%}
+      {"{{details.name}}", _{{details.name}}_ndarray},
+    {% endfor %}
+    };
 
     // We can't LoadExecutable util we have added late-bound constants so the actual creation
     // of loading takes place here
     // void Executable::LoadLateBoundConstantsFromMap(Map<String, NDArray> map)
     // ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> runtime_map(const_map);
+    std::cout << __FILE__ << " " << __LINE__ << "********************** " << std::endl;
     exec->LoadLateBoundConstantsFromMap(const_map);
+    std::cout << __FILE__ << " " << __LINE__ << "********************** " << std::endl;
     vm.LoadExecutable(exec);
+    std::cout << __FILE__ << " " << __LINE__ << "********************** " << std::endl;
 
-    // // Initialize the VM for the specified device. If the device is not a CPU,
-    // // We'll need to add a CPU context to drive it.
-    // int arity;
-    // if (dl_device_type.device_type == kDLCPU) {
-    //   arity = 3;
-    // } else {
-    //   arity = 6;
-    // }
-    // // Specify how to allocate memory for the target devices.
-    // uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
-    // // TODO: rkimball use proper device
-    // uint64_t device_id = 0;
-    // // Create a variable length input to the packed function.
-    // std::vector<TVMValue> init_vals(arity);
-    // std::vector<int> codes(arity);
-    // tvm::runtime::TVMArgsSetter setter(init_vals.data(), codes.data());
-    // // Set up the main device context.
-    // setter(0, (uint64_t(dl_device_type.device_type)));
-    // setter(1, device_id);
-    // setter(2, alloc_type);
-    // // Also initialize a CPU device context.
-    // if (dl_device_type.device_type != kDLCPU) {
-    //   setter(3, (uint64_t(kDLCPU)));
-    //   setter(4, device_id);
-    //   setter(5, alloc_type);
-    // }
-    // tvm::runtime::TVMRetValue rv;
-    // // Call the packed func with the init arguments.
-    // vm.GetFunction("init", nullptr)
-    //     .CallPacked(
-    //         tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
+    // Initialize the VM for the specified device. If the device is not a CPU,
+    // We'll need to add a CPU context to drive it.
+    int arity;
+    if (dl_device_type.device_type == kDLCPU) {
+      arity = 3;
+    } else {
+      arity = 6;
+    }
+    // Specify how to allocate memory for the target devices.
+    uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
+    // TODO: rkimball use proper device
+    uint64_t device_id = 0;
+    // Create a variable length input to the packed function.
+    std::vector<TVMValue> init_vals(arity);
+    std::vector<int> codes(arity);
+    tvm::runtime::TVMArgsSetter setter(init_vals.data(), codes.data());
+    // Set up the main device context.
+    setter(0, (uint64_t(dl_device_type.device_type)));
+    setter(1, device_id);
+    setter(2, alloc_type);
+    // Also initialize a CPU device context.
+    if (dl_device_type.device_type != kDLCPU) {
+      setter(3, (uint64_t(kDLCPU)));
+      setter(4, device_id);
+      setter(5, alloc_type);
+    }
+    tvm::runtime::TVMRetValue rv;
+    // Call the packed func with the init arguments.
+    vm.GetFunction("init", nullptr)
+        .CallPacked(
+            tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
 
-    // set_input_func = vm.GetFunction("set_input", nullptr);
-    // get_output_func = vm.GetFunction("get_output", nullptr);
-    // run_func = vm.GetFunction("invoke", nullptr);
+    set_input_func = vm.GetFunction("set_input", nullptr);
+    get_output_func = vm.GetFunction("get_output", nullptr);
+    run_func = vm.GetFunction("invoke", nullptr);
   }
 
   void Compute(OrtKernelContext* context) {

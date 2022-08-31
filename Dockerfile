@@ -48,6 +48,7 @@ RUN mkdir -p build && \
     echo "set(USE_VULKAN OFF)" >> config.cmake && \
     echo "set(USE_PROFILER ON)" >> config.cmake && \
     echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
+    echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake && \
     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
     make -j $(nproc) && \
     strip libtvm.so
