@@ -24,13 +24,15 @@ ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 WORKDIR ${TVM_HOME}
 COPY 3rdparty/tvm .
 
+WORKDIR /usr/tvm2onnx
 COPY pyproject.toml poetry.lock ./
 
 RUN pip install --upgrade pip && \
-    pip install poetry && \
+    pip install poetry==1.1.15 && \
     poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-ansi -v
 
+WORKDIR ${TVM_HOME}
 RUN mkdir -p build && \
     cd       build && \
     cp ../cmake/config.cmake . && \
