@@ -14,6 +14,7 @@ from test_utils import (
     generate_input_data,
     get_ort_inference_session,
     perf_test,
+    get_tvm_vm_runner,
 )
 
 logging.basicConfig(level=logging.CRITICAL)
@@ -40,6 +41,11 @@ def test_benchmark(
         ort_runner = partial(engine.run, output_names=None, input_feed=input_data)
 
         benchmark_test(ort_runner, framework_name = "Pure ONNX Runtime")
+
+        # Pure TVM (VirtualMachine)
+        tvm_runner = get_tvm_vm_runner(onnx_path, input_shapes, input_data)
+
+        benchmark_test(tvm_runner, framework_name = "TVM")
 
 
 def main():  # pragma: no cover

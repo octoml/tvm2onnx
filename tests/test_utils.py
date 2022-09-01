@@ -10,6 +10,10 @@ import time
 import tarfile
 import onnx
 import onnxruntime
+import tvm
+from tvm import relay, auto_scheduler
+from tvm.relay import vm
+from tvm import autotvm
 
 
 def find(pattern, path):
@@ -98,3 +102,86 @@ def compare_outputs(actual, desired, rtol=5e-5, atol=5e-5):
     assert actual.dtype == desired.dtype
     np.testing.assert_allclose(actual.shape, desired.shape)
     np.testing.assert_allclose(actual, desired, rtol=rtol, atol=atol, verbose=True)
+
+def get_tvm_vm_runner(onnx_path,
+                      input_shapes,
+                      input_data,
+                      opt_level=3,
+                      target="llvm",
+                      target_host="llvm",):
+    mod, params = relay.frontend.from_onnx(onnx_path, input_shapes, freeze_params=True)
+    mod = relay.transform.DynamicToStatic()(mod)
+
+    dev = tvm.device(str(target), 0)
+    vm_exec = get_tvm_virtual_machine(mod,
+                                      opt_level,
+                                      target,
+                                      target_host,
+                                      params,
+                                      dev,)
+
+    tvm_inputs = {input_name: tvm.nd.array(input) for (input_name, input) in input_data}
+    vm_exec.set_input(func_name="main", **tvm_inputs)
+    return vm_exec.run
+
+ANSOR_TYPE = "Ansor"
+AUTO_TVM_TYPE = "AutoTVM"
+def get_tvm_virtual_machine(mod,
+        opt_level,
+        target,
+        target_host,
+        params,
+        dev,
+        nhwc = False,
+        tuning_logfile = "",
+        tuning_type = ANSOR_TYPE):
+    def get_tvm_vm_lib(irmod, target, target_host, params):
+        return vm.compile(
+            irmod,
+            target,
+            params=params,
+            target_host=target_host,
+        )
+
+    if tuning_logfile == "":
+        tuning_logfile = os.getenv("AUTOTVM_TUNING_LOG")
+    lib = None
+    if tuning_logfile:
+        print("Use tuning file from ", tuning_logfile, ": ", tuning_logfile)
+        if tuning_type == ANSOR_TYPE:
+            desired_layouts = {
+                "nn.conv2d": ["NHWC", "default"],
+                "nn.conv2d_transpose": ["NHWC", "default"],
+                "nn.upsampling": ["NHWC", "default"],
+                "vision.roi_align": ["NHWC", "default"],
+            }
+            with auto_scheduler.ApplyHistoryBest(tuning_logfile):
+                with tvm.transform.PassContext(
+                    opt_level=opt_level,
+                    config={
+                        "relay.backend.use_auto_scheduler": True,
+                        "relay.FuseOps.max_depth": 30,
+                        }
+                    ):
+                    if nhwc:
+                        mod = relay.transform.InferType()(mod)
+                        model_nhwc = relay.transform.ConvertLayout(desired_layouts)(mod)
+                        model_nhwc = relay.transform.EliminateCommonSubexpr()(model_nhwc)
+                        mod = relay.transform.FoldConstant()(model_nhwc)
+                    lib = get_tvm_vm_lib(mod, target, target_host, params)
+        elif tuning_type == AUTO_TVM_TYPE:
+            with relay.build_config(opt_level=opt_level):
+                with autotvm.apply_history_best(tuning_logfile):
+                    lib = get_tvm_vm_lib(mod, target, target_host, params)
+        else:
+            print("ERROR: Tuning log type {} is unsupported. ".format(tuning_type),
+                "Only {} and {} types are supported".format(ANSOR_TYPE, AUTO_TVM_TYPE))
+            return None
+    else:
+        with tvm.transform.PassContext(opt_level=opt_level):
+            lib = get_tvm_vm_lib(mod, target, target_host, params)
+
+    if lib is None:
+        return None
+
+    return tvm.runtime.vm.VirtualMachine(lib, dev)
