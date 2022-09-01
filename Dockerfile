@@ -15,9 +15,9 @@ RUN apt-get update --fix-missing && \
 
 
 ENV TVM2ONNX_HOME="/usr/tvm2onnx"
-ENV 3RDPARTY_HOME="${TVM2ONNX_HOME}/3rdparty"
-ENV TVM_HOME="${TVM2ONNX_HOME}/3rdparty/tvm"
-ENV ORT_HOME="${TVM2ONNX_HOME}/3rdparty/onnxruntime"
+ENV THIRDPARTY_HOME="${TVM2ONNX_HOME}/3rdparty"
+ENV TVM_HOME="${THIRDPARTY_HOME}/tvm"
+ENV ORT_HOME="${THIRDPARTY_HOME}/onnxruntime"
 ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
@@ -26,7 +26,7 @@ ENV LC_ALL="en_US.ascii"
 
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
-WORKDIR ${3RDPARTY_HOME}
+WORKDIR ${THIRDPARTY_HOME}
 RUN git clone \
     --recursive \
     -b effcd2251b4bb04e47f8ec288b056b0756ea4f4f \
