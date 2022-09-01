@@ -1,16 +1,19 @@
 # Makefile to compile an onnxruntime custom op library
 
-FLAGS=-DDMLC_USE_LOGGING_LIBRARY=\<tvm/runtime/logging.h\> -DTVM_USE_LIBBACKTRACE=0 -DUSE_FALLBACK_STL_MAP=1
+TVM_ROOT={{cookiecutter.tvm_root}}
+TVM_RUNTIME_PATH={{cookiecutter.tvm_runtime_path}}
+ONNX_RUNTIME_ROOT={{cookiecutter.onnx_runtime_root}}
+FLAGS=-DDMLC_USE_LOGGING_LIBRARY=\<tvm/runtime/logging.h\> -DTVM_USE_LIBBACKTRACE=0
 
 custom_{{cookiecutter.module_name}}.so: custom_op_library.cc
 	g++ \
 		-shared \
 		-Iinclude \
 		-I. \
-		-I$(TVM_HOME)/include \
-		-I$(TVM_HOME)/3rdparty/dlpack/include \
-		-I${TVM_HOME}/3rdparty/dmlc-core/include \
-		-I${ORT_HOME}/include \
+		-I$(TVM_ROOT)/include \
+		-I$(TVM_ROOT)/3rdparty/dlpack/include \
+		-I${TVM_ROOT}/3rdparty/dmlc-core/include \
+		-I$(ONNX_RUNTIME_ROOT)/include \
 		-fPIC \
 		{% if cookiecutter.debug_build -%}
 		-g \
