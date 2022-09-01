@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
-import enum
 import os
 import pathlib
 import sys
@@ -18,7 +17,6 @@ import onnx
 import structlog
 from onnx.external_data_helper import convert_model_to_external_data
 
-from tvm2onnx import onnx_utils
 from tvm2onnx.error import RelayConvertError, RelayOpNotImplementedError, TVM2ONNXError
 from tvm2onnx.inputs import InputDtypes, InputShapes, generate_static_shapes
 from tvm2onnx.model_base import ModelBase
@@ -38,29 +36,6 @@ _ONNX_SUFFIX = ".onnx"
 _MACOS_EXTENDED_ATTRIBUTE_FILE_PREFIX = "._"
 """The prefix of files created inside tars to store MacOS extra file info."""
 
-"""The mapping from onnxruntime backend to execution provider name."""
-_ORT_BACKEND_TO_EPS = {
-    "onnx_cuda": ["CUDAExecutionProvider"],
-    "onnx_runtime": ["CPUExecutionProvider"],
-    "onnx_openvino": ["OpenVINOExecutionProvider"],
-    "onnx_tensorrt": ["TensorrtExecutionProvider", "CUDAExecutionProvider"],
-}
-
-"""The mapping from onnxruntime backend to execution provider options."""
-_ORT_BACKEND_TO_EP_OPTIONS = {
-    "onnx_cuda": [{}],
-    "onnx_runtime": [{}],
-    "onnx_openvino": [{"device_type": "CPU_FP32"}],
-    "onnx_tensorrt": [{}, {}],
-}
-
-
-class ORTExecutionProvider(enum.Enum):
-    """ONNX Runtime Execution Providers"""
-
-    CPU = "onnx_cpu"
-    OPENVINO = "onnx_openvino"
-
 
 class ONNXIngestError(TVM2ONNXError):
     """Indicates an error occurred with model ingest, maybe it's not quite delicious enough."""
@@ -78,28 +53,12 @@ class ONNXIngestMultipleAssetsInTarFileError(TVM2ONNXError):
     """Indicates that the extracted tarfile contains more than one asset."""
 
 
-class ONNXInferInputsError(TVM2ONNXError):
-    """Indicates an error occurred with a model's inputs."""
-
-
 class ONNXInferInputsNoneFoundError(TVM2ONNXError):
     """Indicates that that no inputs were found for the model."""
 
 
 class ONNXInferInputsUnknownDataTypeError(TVM2ONNXError):
     """Indicates that we found inputs with unknown data types."""
-
-
-class ONNXModelError(TVM2ONNXError):
-    """Indicates an error occurred while interacting with a model."""
-
-
-class ONNXPackageError(TVM2ONNXError):
-    """Indicates an error occurred while packaging a model."""
-
-
-class ONNXInferSymbolicShapesError(TVM2ONNXError):
-    """Indicates an error occured while inferring symbolic shapes via ONNX runtime."""
 
 
 @dataclasses.dataclass
@@ -252,60 +211,6 @@ class ONNXModel(ModelBase):
 
         self.input_shapes = input_shapes
         self.input_dtypes = input_dtypes
-
-    def infer_symbolic_shapes(self):
-        """If some operators in the model are not supported by TensorRT, onnxruntime
-        will partition the graph and only send supported subgraphs to TensorRT execution
-        provider. Because TensorRT requires that all inputs of the subgraphs have shape
-        specified, onnxruntime will throw error if there is no input shape info. To
-        avoid this, we call onnxruntime's symbolic shape inference tool.
-        """
-        success = self.run_symbolic_shape_inference(do_rewrite=False)
-
-        if not success:
-            # Static input shapes should have been set at this point, but the
-            # actual model inputs could be dynamic. Make sure inputs are static,
-            # then rewrite the graph and run symbolic shape inference.
-            assert self.inputs_are_static()
-            success = self.run_symbolic_shape_inference(do_rewrite=True)
-
-        if not success:
-            raise ONNXInferSymbolicShapesError(
-                "Unable to run symbolic shape inference."
-            )
-
-    def run_symbolic_shape_inference(self, do_rewrite: bool) -> bool:
-        """Run ONNX runtime's symbolic shape inference.
-        :param do_rewrite: Flag to rewrite the graph or not.
-        :return success
-        """
-        from onnxruntime.tools.symbolic_shape_infer import SymbolicShapeInference
-
-        # auto_merge resolves conflicting shapes automatically, guess_output_rank is for unknown
-        # ops (e.g. ops from higher opsets os custom ops). We try with the defaults first.
-        success = False
-        conditions = [(False, False), (True, False), (True, True)]
-        for auto_merge, guess_output_rank in conditions:
-            if success:
-                break
-            try:
-                LOG.info(
-                    "Run symbolic shape inference",
-                    auto_merge=auto_merge,
-                    guess_output_rank=guess_output_rank,
-                )
-                self.model = SymbolicShapeInference.infer_shapes(
-                    onnx_utils.rewrite(self.model, self.generate_input_data())
-                    if do_rewrite
-                    else self.model,
-                    auto_merge=auto_merge,
-                    guess_output_rank=guess_output_rank,
-                )
-                success = True
-            except Exception as e:
-                LOG.info("Unable to run symbolic shape inference:", error=str(e))
-
-        return success
 
     def to_file(self, model_path: pathlib.Path, save_as_external_data=False) -> None:
         """Saves the model to a file.

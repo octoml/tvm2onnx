@@ -9,7 +9,6 @@ import dataclasses
 import json
 import os
 import pathlib
-import re
 import shutil
 import tarfile
 import tempfile
@@ -26,10 +25,10 @@ from tvm.runtime import vm as vm_rt
 from tvm.tir.expr import Any
 from tvm.utils import roofline
 
-from tvm2onnx import relay_model_runtime, relay_serializer
+from tvm2onnx import relay_serializer
 from tvm2onnx.error import TVM2ONNXError
 from tvm2onnx.inputs import InputDtypes, InputShapes
-from tvm2onnx.model_base import ModelArgument, ModelBase
+from tvm2onnx.model_base import ModelBase
 from tvm2onnx.tuning_records import (
     RecordType,
     TuningRecordsType,
@@ -300,26 +299,6 @@ class RelayModel(ModelBase):
         return True
 
     @staticmethod
-    def _parse_argument_shapes(
-        dtype_shapes: str,
-    ) -> typing.List[ModelArgument]:
-        """Parse TVM dtype/shape strings into model.ModelArgument objects. This ignores
-            all whitespace within the string and should handle TVM making minor changes
-            to the format of the string.
-        :param dtype_shapes: A string which contains a collection of TVM formatted dtypes/shapes
-            where each dtype/shape looks something like float32[1, 1, 32, 32, 1]
-        :return: A list of model.ModelArgument
-        """
-        dtype_shape = re.findall("(\\w*)\\s*\\[([^\\]]*)\\]", dtype_shapes)
-        arguments = []
-        for ds in dtype_shape:
-            dtype = ds[0]
-            shape = [int(axis) for axis in ds[1].split(",")] if len(ds[1]) > 0 else []
-            arg = ModelArgument(dtype=dtype, shape=shape)
-            arguments.append(arg)
-        return arguments
-
-    @staticmethod
     def shared_object_build_func(host_target: str):
         """Gets a TVM build function for creating a shared object
 
@@ -396,59 +375,6 @@ class RelayModel(ModelBase):
         end_compile = time.perf_counter()
         compile_s = end_compile - start_compile
         return exe, saved_tir.functions, compile_s
-
-    def create_library_file(
-        self,
-        path: str,
-        tvm_target: typing.Union[str, target.Target],
-        tvm_target_host: typing.Optional[str],
-        opt_level: int,
-        shared_library: bool = True,
-    ) -> float:
-        """Create a .tar.gz file of the model's serialized library and constants.
-
-        :param path: the file to store the generated library
-        :param tvm_target: the tvm target for which to compile the model
-        :param tvm_target_host: the tvm target host for which to compile the model
-        :param opt_level: the optimization level for compiling the model
-        :return: the model compile time in seconds"""
-        exe, _, compile_s = self._create_vm_exe(
-            tvm_target=tvm_target,
-            tvm_target_host=tvm_target_host,
-            opt_level=opt_level,
-        )
-        with tempfile.TemporaryDirectory() as tempdir:
-            consts_path = os.path.join(
-                tempdir, relay_model_runtime.RELAY_VM_CONSTS_NAME
-            )
-            exe.move_late_bound_consts(
-                consts_path,
-                byte_limit=relay_model_runtime.RELAY_VM_LARGE_CONST_BYTE_LIMIT,
-            )
-
-            build_func = RelayModel.shared_object_build_func(
-                tvm_target_host or str(tvm_target)
-            )
-            library_name = relay_model_runtime.RELAY_VM_LIBRARY_NAME
-
-            lib_path = os.path.join(tempdir, library_name)
-            exe.mod.export_library(lib_path, build_func)
-
-            with tarfile.open(path, "w:gz") as tar:
-                tar.add(consts_path, arcname=relay_model_runtime.RELAY_VM_CONSTS_NAME)
-                tar.add(lib_path, arcname=library_name)
-
-        return compile_s
-
-    def model_has_quantized_operators(self):
-        # This hack returns whether the model is quantized, defined here
-        # as using any operators from QNN, TVM's quantized model support
-        # method.
-        freq_counts = relay.analysis.list_op_freqs(self.model)
-        for op in freq_counts.keys():
-            if str(op).startswith("qnn."):
-                return True
-        return False
 
     def get_outputs(self) -> typing.List[RelayTensorDetail]:
         """Utility function to infer the IRModule outputs.

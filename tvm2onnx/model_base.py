@@ -33,19 +33,6 @@ class ModelArgument(typing.NamedTuple):
     """The shape of the argument."""
 
 
-class BenchmarkResult(typing.NamedTuple):
-    """Stores benchmark result."""
-
-    latency_mean_ms: float
-    """The mean time in milliseconds."""
-
-    latency_std_ms: float
-    """The standard deviation of the result."""
-
-    runtime_ms: typing.List[float]
-    """A list times for the runs"""
-
-
 @dataclasses.dataclass
 class ModelBase(abc.ABC):
     """A wrapper class providing a common interface to various model types."""
