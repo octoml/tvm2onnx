@@ -15,7 +15,9 @@ RUN apt-get update --fix-missing && \
 
 
 ENV TVM2ONNX_HOME="/usr/tvm2onnx"
-ENV TVM_HOME="${TVM2ONNX_HOME}/3rdparty/tvm"
+ENV THIRDPARTY_HOME="${TVM2ONNX_HOME}/3rdparty"
+ENV TVM_HOME="${THIRDPARTY_HOME}/tvm"
+ENV ORT_HOME="${THIRDPARTY_HOME}/onnxruntime"
 ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
@@ -24,10 +26,22 @@ ENV LC_ALL="en_US.ascii"
 
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
-WORKDIR ${TVM_HOME}
-COPY 3rdparty/tvm .
+WORKDIR ${THIRDPARTY_HOME}
+# For TVM I can't checkout a hash directly, I need to clone then checkout the hash
+RUN git clone \
+    --recursive \
+    https://github.com/apache/tvm.git && \
+    cd tvm && \
+    git checkout effcd2251b4bb04e47f8ec288b056b0756ea4f4f && \
+    git submodule update
 
-WORKDIR /usr/tvm2onnx
+WORKDIR ${THIRDPARTY_HOME}
+RUN git clone \
+    -b v1.12.1 \
+    --depth 1 \
+    https://github.com/microsoft/onnxruntime.git
+
+WORKDIR ${TVM2ONNX_HOME}
 COPY pyproject.toml poetry.lock ./
 
 RUN pip install --upgrade pip && \
