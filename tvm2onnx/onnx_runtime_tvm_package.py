@@ -162,29 +162,6 @@ class ONNXRuntimeTVMPackage:
         """The template dir to copy and modify for this package job."""
         return _CPP_TEMPLATE_PATH
 
-    def _sanitize_outputs(
-        self, tensors: typing.Sequence[relay_model.RelayTensorDetail]
-    ) -> typing.Sequence[relay_model.RelayTensorDetail]:
-        """Sanitizes the outputs of the model."""
-        output_details = []
-        for tensor in tensors:
-            shape = []
-            for dim in tensor.shape:
-                # A dim will have dtype int64 if the original ONNX
-                # model has a `Shape` operator producing int64 dims.
-                # We cast to int32 to avoid producing an invalid model
-                # config for Triton where dims are strings like "1i64"
-                # rather than just "1".
-                new_dim = -1 if isinstance(dim, tvm.tir.expr.Any) else int(dim)
-                shape.append(new_dim)
-            detail = relay_model.RelayTensorDetail(
-                tensor.name,
-                shape,
-                tensor.dtype,
-            )
-            output_details.append(detail)
-        return output_details
-
     def cookiecutter_config(
         self,
         model: relay_model.RelayModel,
@@ -291,19 +268,6 @@ class ONNXRuntimeTVMPackage:
             "vm_exec_path": "vm_exec_code.ro",
             "tvm_model_lib": f"{self._model_name}.so",
         }
-
-    def config_file(self, source: str, target: str, config: typing.Dict[str, str]):
-        with open(source, "r") as f:
-            content = f.read()
-            for tag, replacement in config.items():
-                content = re.sub(
-                    pattern=f"\\${tag}\\$",
-                    repl=replacement,
-                    string=content,
-                    flags=re.RegexFlag.MULTILINE,
-                )
-            with open(target, "w") as out:
-                out.write(content)
 
     def build_package(
         self, model: relay_model.RelayModel, build_dir: pathlib.Path
