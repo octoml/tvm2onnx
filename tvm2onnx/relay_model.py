@@ -227,11 +227,12 @@ class RelayModel(ModelBase):
                 model_tar.extractall(tmpdir)
                 with open(os.path.join(tmpdir, "metadata.json")) as json_file:
                     metadata = json.load(json_file)
+                best_records_path = os.path.join(tmpdir, "best_records.log")
                 relay_model = RelayModel.from_file(
-                    module_and_params=os.path.join(tmpdir, "model.bin"),
+                    module_and_params=pathlib.Path(os.path.join(tmpdir, "model.bin")),
                     input_shapes=metadata["input_shapes"],
                     input_dtypes=metadata["input_dtypes"],
-                    best_records_path=os.path.join(tmpdir, "best_records.log"),
+                    best_records_path=pathlib.Path(best_records_path) if os.path.exists(best_records_path) else None,
                 )
                 relay_model.output_names = metadata["output_shapes"].keys()
                 return relay_model
