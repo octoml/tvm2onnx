@@ -27,13 +27,18 @@ ENV LC_ALL="en_US.ascii"
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
 WORKDIR ${THIRDPARTY_HOME}
+# For TVM I can't checkout a hash directly, I need to clone then checkout the hash
 RUN git clone \
     --recursive \
-    -b effcd2251b4bb04e47f8ec288b056b0756ea4f4f \
-    https://github.com/apache/tvm.git
+    https://github.com/apache/tvm.git && \
+    cd tvm && \
+    git checkout effcd2251b4bb04e47f8ec288b056b0756ea4f4f && \
+    git submodule update
+
+WORKDIR ${THIRDPARTY_HOME}
 RUN git clone \
-    --recursive \
-    -b 1.12.1 \
+    -b v1.12.1 \
+    --depth 1 \
     https://github.com/microsoft/onnxruntime.git
 
 WORKDIR ${TVM2ONNX_HOME}
