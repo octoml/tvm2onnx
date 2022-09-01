@@ -1,4 +1,5 @@
 import os
+import typing
 
 import structlog
 
@@ -50,8 +51,16 @@ def get_tvm_revision_hash() -> str:
 
 
 def print_path_contents(dir_root):
+    for path in get_path_contents(dir_root):
+        print(path)
+
+
+def get_path_contents(dir_root) -> typing.List[str]:
+    contents = []
     for lists in os.listdir(dir_root):
         path = os.path.join(dir_root, lists)
-        print(path)
+        # Add 1 to catch the trailing / character
+        contents.append(path[len(dir_root) + 1 :])
         if os.path.isdir(path):
-            print_path_contents(path)
+            contents.extend(get_path_contents(path))
+    return contents
