@@ -15,7 +15,9 @@ RUN apt-get update --fix-missing && \
 
 
 ENV TVM2ONNX_HOME="/usr/tvm2onnx"
+ENV 3RDPARTY_HOME="${TVM2ONNX_HOME}/3rdparty"
 ENV TVM_HOME="${TVM2ONNX_HOME}/3rdparty/tvm"
+ENV ORT_HOME="${TVM2ONNX_HOME}/3rdparty/onnxruntime"
 ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
@@ -24,10 +26,17 @@ ENV LC_ALL="en_US.ascii"
 
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
-WORKDIR ${TVM_HOME}
-COPY 3rdparty/tvm .
+WORKDIR ${3RDPARTY_HOME}
+RUN git clone \
+    --recursive \
+    -b effcd2251b4bb04e47f8ec288b056b0756ea4f4f \
+    https://github.com/apache/tvm.git
+RUN git clone \
+    --recursive \
+    -b 1.12.1 \
+    https://github.com/microsoft/onnxruntime.git
 
-WORKDIR /usr/tvm2onnx
+WORKDIR ${TVM2ONNX_HOME}
 COPY pyproject.toml poetry.lock ./
 
 RUN pip install --upgrade pip && \
