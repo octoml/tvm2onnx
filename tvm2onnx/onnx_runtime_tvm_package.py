@@ -32,7 +32,6 @@ from tvm2onnx.utils import get_path_contents
 
 LOG = structlog.get_logger(__name__)
 
-_CPP_TEMPLATE_PATH = "/usr/tvm2onnx/tvm2onnx/templates/onnx_custom_op"
 
 ONNXTensorElementDataType = [
     "ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED",
@@ -122,7 +121,9 @@ class ONNXRuntimeTVMPackage:
         self._relay_opt_level = relay_opt_level
         self._build_dir = pathlib.Path(build_dir)
 
-        self._tvm_dir = pathlib.Path(os.path.dirname(tvm.__file__)).parent.parent
+        from . import get_tvm_root_dir, get_onnx_runtime_root_dir
+        self._onnx_runtime_dir = pathlib.Path(get_onnx_runtime_root_dir())
+        self._tvm_dir = pathlib.Path(get_tvm_root_dir())
         build_folder = self._get_build_folder(self._tvm_target, self._tvm_host_target)
 
         self._tvm_build_dir = self._tvm_dir / build_folder
@@ -135,12 +136,11 @@ class ONNXRuntimeTVMPackage:
         """
         cpu_target = tvm_host_target or tvm_target
 
+        build_cpu_part = ""
         if "aarch64-linux-gnu" in cpu_target:
             build_cpu_part = "-aarch64"
         elif "armv8l-linux-gnueabihf" in cpu_target:
             build_cpu_part = "-aarch32"
-        else:
-            build_cpu_part = "-x86_64"
 
         backend_part = ""
         if "cuda" in tvm_target:
@@ -160,7 +160,8 @@ class ONNXRuntimeTVMPackage:
     @property
     def template_dir(self):
         """The template dir to copy and modify for this package job."""
-        return _CPP_TEMPLATE_PATH
+        from . import get_templates_dir
+        return get_templates_dir()
 
     def cookiecutter_config(
         self,
@@ -264,6 +265,11 @@ class ONNXRuntimeTVMPackage:
             "inputs": inputs,
             "outputs": outputs,
             "initializers": initializers,
+            "vm_exec_path": "vm_exec_code.ro",
+            "tvm_model_lib": f"{self._model_name}.so",
+            "tvm_root": str(self._tvm_dir),
+            "tvm_runtime_path": str(self._tvm_build_dir),
+            "onnx_runtime_root": str(self._onnx_runtime_dir),
         }
 
     def _sanitize_io_name(self, name: str) -> str:
