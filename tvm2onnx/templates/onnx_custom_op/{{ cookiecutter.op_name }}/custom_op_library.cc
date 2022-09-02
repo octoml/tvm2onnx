@@ -88,7 +88,6 @@ struct TVMRuntime {
     extern const char model_so_end[] asm("_binary_model_so_end");
     size_t model_so_size = model_so_end - model_so_start;
 
-    std::string consts_path = "{{ cookiecutter.consts_name }}";
     DLDeviceType dl_device_type = {{ cookiecutter.dl_device_type }};
 
     // TVM's model shared library needs to be a standalone shared lib
@@ -264,13 +263,23 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
 
   size_t GetInputTypeCount() const { return {{cookiecutter.input_count}} + {{cookiecutter.initializer_count}}; };
   ONNXTensorElementDataType GetInputType(size_t index) const {
-    static std::vector<ONNXTensorElementDataType> input_types = {{cookiecutter.input_types}};
+    static ONNXTensorElementDataType input_types[] = {
+      {% for input_type in cookiecutter.input_types -%}
+      {{input_type}},
+      {% endfor %}
+    };
+
     return input_types[index];
   };
 
   size_t GetOutputTypeCount() const { return {{cookiecutter.output_count}}; };
   ONNXTensorElementDataType GetOutputType(size_t index) const {
-    static std::vector<ONNXTensorElementDataType> output_types = {{cookiecutter.output_types}};
+    static ONNXTensorElementDataType output_types[] = {
+      {% for output_type in cookiecutter.output_types -%}
+      {{output_type}},
+      {% endfor %}
+    };
+
     return output_types[index];
   };
 
