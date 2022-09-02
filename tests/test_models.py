@@ -16,7 +16,6 @@ import os
 def test_models_in_models_dir():
     for model_name in get_path_contents(_MODELS_DIR):
         model_path = os.path.join(_MODELS_DIR, model_name)
-        print("*********************", model_path)
         source_model = ONNXModel.from_file(model_path)
         source_model.infer_and_update_inputs()
         for name, shape in source_model.input_shapes.items():
