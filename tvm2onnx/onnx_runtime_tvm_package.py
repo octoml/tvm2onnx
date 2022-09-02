@@ -268,8 +268,10 @@ class ONNXRuntimeTVMPackage:
 
     def _sanitize_io_name(self, name: str) -> str:
         """Strip trailing ":<NUMBER>" from names
+
         :param name: the input/output name to sanitize
-        :return: sanitized name"""
+        :return: sanitized name
+        """
         colon_index = name.rfind(":")
         if colon_index > 0:
             name = name[:colon_index]
