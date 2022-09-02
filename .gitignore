@@ -1,4 +1,4 @@
-# Custom gitignore
+e --# Custom gitignore
 secrets
 
 /target
@@ -164,7 +164,9 @@ shell.nix
 # Direnv stuff
 .envrc
 .direnv
+
 3rdparty/*
+models/*
 *.tvm
 *.onnx
 
