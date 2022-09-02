@@ -266,6 +266,13 @@ class ONNXRuntimeTVMPackage:
             "initializers": initializers,
         }
 
+    def _sanitize_io_name(self, name: str) -> str:
+        # Strip trailing ":<NUMBER>" from names
+        colon_index = name.rfind(":")
+        if colon_index > 0:
+            name = name[:colon_index]
+        return name
+
     def build_package(
         self, model: relay_model.RelayModel, build_dir: pathlib.Path
     ) -> pathlib.Path:
@@ -320,20 +327,22 @@ class ONNXRuntimeTVMPackage:
             raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
 
         for name in model.input_dtypes.keys():
+            sanitized_name = self._sanitize_io_name(name)
             shape = model.input_shapes[name]
             dtype = model.input_dtypes[name]
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
-            tensor = make_tensor_value_info(name, tensortype, shape)
+            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
             input_tensors.append(tensor)
-            custom_op_input_names.append(name)
+            custom_op_input_names.append(sanitized_name)
 
         for output in model.get_outputs():
+            sanitized_name = self._sanitize_io_name(output.name)
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
                 np.dtype(output.dtype)
             ]
-            tensor = make_tensor_value_info(output.name, tensortype, None)
+            tensor = make_tensor_value_info(sanitized_name, tensortype, None)
             output_tensors.append(tensor)
-            output_names.append(output.name)
+            output_names.append(sanitized_name)
 
         custom_op = make_node(
             self.custom_op_name,

@@ -19,9 +19,12 @@ def test_models_in_models_dir():
         print("*********************", model_path)
         source_model = ONNXModel.from_file(model_path)
         source_model.infer_and_update_inputs()
-        relay_model = source_model.to_relay()
-        for name, shape in relay_model.input_shapes.items:
+        for name, shape in source_model.input_shapes.items():
+            if shape[0] == -1:
+                shape[0] = 1
+                source_model.input_shapes[name] = shape
             print(f"input {name}, shape {shape}")
+        relay_model = source_model.to_relay()
         with tempfile.TemporaryDirectory() as tdir:
             onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
             relay_model.package_to_onnx(
@@ -35,13 +38,12 @@ def test_models_in_models_dir():
             onnx_model_path = os.path.join(model_dir, "test_model.onnx")
             custom_lib = os.path.join(model_dir, "custom_test_model.so")
 
+            onnx_model = ONNXModel.from_file(onnx_model_path)
+            onnx_model.infer_and_update_inputs()
             input_data = {}
-            input_data["a"] = np.array(
-                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], dtype=np.float32
-            )
-            input_data["b"] = np.array(
-                [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], dtype=np.float32
-            )
+            for name, shape in onnx_model.input_shapes.items():
+                dtype = onnx_model.input_dtypes[name]
+                input_data[name] = np.random.randn(*shape).astype(np.dtype(dtype))
 
             sess_options = onnxruntime.SessionOptions()
             sess_options.register_custom_ops_library(custom_lib)
@@ -52,4 +54,5 @@ def test_models_in_models_dir():
                 provider_options=[{}],
                 sess_options=sess_options,
             )
+
             output_data = engine.run(output_names=None, input_feed=input_data)
