@@ -149,7 +149,6 @@ def test_constant_model():
             output_path=onnx_path,
         )
         model_dir = os.path.join(tdir, "model")
-        shutil.copy(onnx_path, "/usr/constants.tvm.onnx")
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
 
