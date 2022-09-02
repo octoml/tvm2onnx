@@ -1,4 +1,4 @@
-e --# Custom gitignore
+# Custom gitignore
 secrets
 
 /target
