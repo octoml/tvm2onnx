@@ -165,3 +165,6 @@ shell.nix
 .envrc
 .direnv
 3rdparty/*
+*.tvm
+*.onnx
+

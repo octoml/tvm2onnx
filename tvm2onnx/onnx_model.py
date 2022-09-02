@@ -18,7 +18,12 @@ import structlog
 from onnx.external_data_helper import convert_model_to_external_data
 
 from tvm2onnx.error import RelayConvertError, RelayOpNotImplementedError, TVM2ONNXError
-from tvm2onnx.inputs import InputDtypes, InputShapes, generate_static_shapes
+from tvm2onnx.inputs import (
+    InputDtypes,
+    InputShapes,
+    generate_static_shapes,
+    get_dynamic_inputs,
+)
 from tvm2onnx.model_base import ModelBase
 
 # Ensure we don't unconditionally require other runtimes.
@@ -59,6 +64,10 @@ class ONNXInferInputsNoneFoundError(TVM2ONNXError):
 
 class ONNXInferInputsUnknownDataTypeError(TVM2ONNXError):
     """Indicates that we found inputs with unknown data types."""
+
+
+class ONNXHasDynamicInputs(TVM2ONNXError):
+    """Indicates that at least one input is dynamic."""
 
 
 @dataclasses.dataclass
@@ -251,6 +260,10 @@ class ONNXModel(ModelBase):
         LOG.info("Convert model to_relay")
         try:
             self._infer_and_update_missing_inputs()
+            if len(get_dynamic_inputs(self.input_shapes)) > 0:
+                raise ONNXHasDynamicInputs(
+                    "Cannot convert to Relay with dynamic inputs"
+                )
             try:
                 mod, params = relay.frontend.from_onnx(
                     self.model, shape=self.input_shapes, freeze_params=True
