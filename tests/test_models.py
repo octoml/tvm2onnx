@@ -14,6 +14,8 @@ import os
 
 @pytest.mark.slow
 def test_models_in_models_dir():
+    """So far this test is just to see if models fail to either load or run"""
+
     for model_name in get_path_contents(_MODELS_DIR):
         model_path = os.path.join(_MODELS_DIR, model_name)
         source_model = ONNXModel.from_file(model_path)
