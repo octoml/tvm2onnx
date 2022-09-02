@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-#  type: ignore
 """Defines a representation of Relay models. Requires a full TVM build."""
 
 from __future__ import annotations
@@ -102,14 +100,32 @@ class RelayModel(ModelBase):
     """Represents a Model in Relay format."""
 
     model: tvm.ir.IRModule
-    params: relay_serializer.ModelParams = None
-    best_records: TuningRecordsType = dataclasses.field(default_factory=list)
-    output_names: typing.Optional[typing.List[str]] = None
-    """Since TVM does not have named outputs we can use output_names to set a list of names
-    for the output tensors. These names are applied to the outputs when the get_outputs() method
-    is called. This is added to allow Triton config files outputs to have appropriate names.
-    output_names is intended to be set by framework `to_relay` functions, such as when converting
-    an onnx model to relay. This propagates the onnx model output names through relay."""
+
+    def __init__(
+        self,
+        *args,
+        params: relay_serializer.ModelParams,
+        best_records: TuningRecordsType = None,
+        output_names: typing.List[str] = None,
+        **kwargs,
+    ):
+        """Initializes a new RelayModel.
+
+        :param params: the parameters of this model.
+        :param best_records: the best tuning records available for this model.
+        :param output_names: Since TVM does not have named outputs we can use
+            output_names to set a list of names for the output tensors. These
+            names are applied to the outputs when the get_outputs() method
+            is called. This is added to allow Triton config files outputs to
+            have appropriate names. output_names is intended to be set by
+            framework `to_relay` functions, such as when converting an onnx
+            model to relay. This propagates the onnx model output names through
+            relay.
+        """
+        super().__init__(*args, **kwargs)
+        self.params = params
+        self.best_records: TuningRecordsType = best_records or []
+        self.output_names = output_names
 
     @classmethod
     def from_file(
@@ -131,11 +147,11 @@ class RelayModel(ModelBase):
             model_bytes = f.read()
         module, params = relay_serializer.RelaySerializer.deserialize(model_bytes)
 
-        best_records = (
+        best_records: TuningRecordsType = (
             read_tuning_records(best_records_path) if best_records_path else []
         )
 
-        return cls(  # type: ignore
+        return cls(
             model=module,
             input_shapes=input_shapes,
             input_dtypes=input_dtypes,
@@ -168,7 +184,7 @@ class RelayModel(ModelBase):
 
     @staticmethod
     def create_tvm_filename(path: str) -> str:
-        model_name = os.path.split(path).tail()
+        model_name = os.path.split(path)[-1]
         ext_list = [
             ".tar.gz",
             ".tgz",
@@ -185,7 +201,7 @@ class RelayModel(ModelBase):
         path: str,
         best_records: typing.IO[bytes] = None,
         full_records: typing.IO[bytes] = None,
-    ) -> None:
+    ):
         with tarfile.open(path, "w") as model_tar:
             model_bytes = relay_serializer.RelaySerializer.serialize(
                 (self.model, self.params)
@@ -198,7 +214,7 @@ class RelayModel(ModelBase):
                 model_tar.add(best_records.name, "best_records.log")
             elif self.best_records:
                 with tempfile.NamedTemporaryFile("wb") as f:
-                    write_tuning_records(f.name, self.best_records)
+                    write_tuning_records(pathlib.Path(f.name), self.best_records)
                     f.flush()
                     model_tar.add(f.name, "best_records.log")
             if full_records:
@@ -215,10 +231,10 @@ class RelayModel(ModelBase):
                 "output_shapes": output_shapes,
                 "output_dtypes": output_dtypes,
             }
-            with tempfile.NamedTemporaryFile("w") as f:
-                json.dump(metadata, f)
-                f.flush()
-                model_tar.add(f.name, "metadata.json")
+            with tempfile.NamedTemporaryFile("w") as tmpf:
+                json.dump(metadata, tmpf)
+                tmpf.flush()
+                model_tar.add(tmpf.name, "metadata.json")
 
     @staticmethod
     def from_tvm_file(path: str) -> RelayModel:
@@ -228,10 +244,12 @@ class RelayModel(ModelBase):
                 with open(os.path.join(tmpdir, "metadata.json")) as json_file:
                     metadata = json.load(json_file)
                 relay_model = RelayModel.from_file(
-                    module_and_params=os.path.join(tmpdir, "model.bin"),
+                    module_and_params=pathlib.Path(os.path.join(tmpdir, "model.bin")),
                     input_shapes=metadata["input_shapes"],
                     input_dtypes=metadata["input_dtypes"],
-                    best_records_path=os.path.join(tmpdir, "best_records.log"),
+                    best_records_path=pathlib.Path(
+                        os.path.join(tmpdir, "best_records.log")
+                    ),
                 )
                 relay_model.output_names = metadata["output_shapes"].keys()
                 return relay_model
@@ -260,11 +278,11 @@ class RelayModel(ModelBase):
                 model_name=name,
                 tvm_target=tvm_target,
                 relay_opt_level=relay_opt_level,
-                build_dir=tdir,
+                build_dir=pathlib.Path(tdir),
                 tvm_host_target=host_target,
             )
             onnx_tar = packager.build(model=self)
-            shutil.move(onnx_tar, output_path)
+            shutil.move(str(onnx_tar), str(output_path))
 
     def infer_inputs(
         self,
@@ -331,17 +349,15 @@ class RelayModel(ModelBase):
         """
         start_compile = time.perf_counter()
 
-        best_records = [] if self.best_records is None else self.best_records
-
         tvm_target_, tvm_host_target_ = target.Target.canon_target_and_host(
             tvm_target, tvm_target_host
         )
 
         saved_tir = roofline.SaveLoweredTIR()
 
-        record_type = infer_record_type(best_records)
+        record_type = infer_record_type(self.best_records)
         if record_type == RecordType.AUTOTVM:
-            with autotvm.apply_history_best(best_records):
+            with autotvm.apply_history_best(self.best_records):
                 with tvm.transform.PassContext(
                     opt_level=opt_level,
                     config={"relay.FuseOps.max_depth": 30},
@@ -354,7 +370,7 @@ class RelayModel(ModelBase):
                         target_host=tvm_host_target_,
                     )
         elif record_type == RecordType.AUTOSCHEDULE:
-            with auto_scheduler.ApplyHistoryBest(best_records):
+            with auto_scheduler.ApplyHistoryBest(self.best_records):
                 with tvm.transform.PassContext(
                     opt_level=opt_level,
                     config={

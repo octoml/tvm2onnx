@@ -5,6 +5,7 @@ These ONNX wrapped TVM models can be run using onnx_benchmark.py.
 
 import argparse
 import logging
+import pathlib
 
 from scripts.utils import setup_logging
 from tvm2onnx.relay_model import RelayModel
@@ -21,7 +22,9 @@ def package(
     except Exception as err:
         print(err.args[0].replace(r"\n", "\n"))
     try:
-        relay_model.package_to_onnx("mnist", tvm_target="llvm", output_path=output_path)
+        relay_model.package_to_onnx(
+            "mnist", tvm_target="llvm", output_path=pathlib.Path(output_path)
+        )
     except Exception as err:
         print(err.args[0].replace(r"\n", "\n"))
 

@@ -1,9 +1,6 @@
-#!/usr/bin/env python
-#  type: ignore
 """Defines the abstract base class for all models."""
 
 import abc
-import dataclasses
 import typing
 
 import numpy as np
@@ -33,18 +30,25 @@ class ModelArgument(typing.NamedTuple):
     """The shape of the argument."""
 
 
-@dataclasses.dataclass
 class ModelBase(abc.ABC):
     """A wrapper class providing a common interface to various model types."""
 
-    model: typing.Any
-    """The underlying model wrapped by this Model, e.g. a onnx.ModelProto."""
+    def __init__(
+        self,
+        model: typing.Any,
+        input_shapes: InputShapes = None,
+        input_dtypes: InputDtypes = None,
+    ):
+        """Initializes a new ModelBase.
 
-    input_shapes: InputShapes = None
-    """The shapes of this Model's input tensors."""
-
-    input_dtypes: InputDtypes = None
-    """The dtypes of this Model's input tensors."""
+        :param model: The underlying model wrapped by this Model, e.g.
+            a onnx.ModelProto.
+        :param input_shapes: The shapes of this Model's input tensors.
+        :param input_dtypes: The dtypes of this Model's input tensors.
+        """
+        self.model = model
+        self.input_shapes = input_shapes or {}
+        self.input_dtypes = input_dtypes or {}
 
     @abc.abstractmethod
     def infer_inputs(
