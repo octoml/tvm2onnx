@@ -15,7 +15,7 @@ from onnx.helper import (
     make_tensor,
     make_tensor_value_info,
 )
-
+from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 from tvm2onnx.onnx_model import ONNXModel
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
@@ -65,16 +65,16 @@ def test_onnx_package():
         assert np.allclose(product, actual_product)
 
 
-def add_constant_onnx_model(model_dir, input_shape, uniform=False):
+def add_constant_onnx_model(model_dir, input_shape, dtype, uniform):
     """Returns an ONNX model with external constants."""
-    a = make_tensor_value_info("a:0", TensorProto.FLOAT, input_shape)
+    a = make_tensor_value_info("a:0", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
 
     if uniform:
-        c1_data = np.full(shape=input_shape, fill_value=3, dtype=np.dtype("float32"))
-        c2_data = np.full(shape=input_shape, fill_value=4, dtype=np.dtype("float32"))
+        c1_data = np.full(shape=input_shape, fill_value=3, dtype=dtype)
+        c2_data = np.full(shape=input_shape, fill_value=4, dtype=dtype)
     else:
-        c1_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
-        c2_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
+        c1_data = np.random.randn(*input_shape).astype(dtype)
+        c2_data = np.random.randn(*input_shape).astype(dtype)
     c1 = make_node(
         "Constant",
         inputs=[],
@@ -82,7 +82,7 @@ def add_constant_onnx_model(model_dir, input_shape, uniform=False):
         name="c1_const_data",
         value=make_tensor(
             name="c1_tensor",
-            data_type=TensorProto.FLOAT,
+            data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
             dims=c1_data.shape,
             vals=c1_data.flatten().tobytes(),
             raw=True,
@@ -97,7 +97,7 @@ def add_constant_onnx_model(model_dir, input_shape, uniform=False):
         name="c2_const_data",
         value=make_tensor(
             name="c2_tensor",
-            data_type=TensorProto.FLOAT,
+            data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
             dims=c2_data.shape,
             vals=c2_data.flatten().tobytes(),
             raw=True,
@@ -107,7 +107,7 @@ def add_constant_onnx_model(model_dir, input_shape, uniform=False):
     add = make_node("Add", ["a:0", "c1"], ["add"])
     mul = make_node("Mul", ["add", "c2"], ["result"])
 
-    result = make_tensor_value_info("result", TensorProto.FLOAT, input_shape)
+    result = make_tensor_value_info("result", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
 
     graph = make_graph(
         nodes=[c1, add, c2, mul], name="ab_model", inputs=[a], outputs=[result]
@@ -132,12 +132,12 @@ def add_constant_onnx_model(model_dir, input_shape, uniform=False):
     return c1_data, c2_data
 
 
-def test_constant_model():
+def test_constant_model(dtype):
     input_shape = [8, 3, 224, 224]
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, uniform=True
+            model_dir=tdir, input_shape=input_shape, dtype=np.dtype("float32"), uniform=True
         )
         onnx_model = ONNXModel.from_file(model_path)
         onnx_model.infer_and_update_inputs()
