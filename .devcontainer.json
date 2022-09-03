@@ -4,14 +4,15 @@
     "context": ".",
     "build": {
         "args": {
-            "BUILDKIT_INLINE_CACHE": "1",
-        },
+            "BUILDKIT_INLINE_CACHE": "1"
+        }
     },
     "runArgs": [
         "--gpus", "all",
         "-v", "/var/run/docker.sock:/var/run/docker.sock"
     ],
     "workspaceFolder": "/usr/tvm2onnx",
+    "mounts": ["source=${localWorkspaceFolder}/models,target=/usr/tvm2onnx/models,type=bind,consistency=cached"],
     "extensions": [
         "bierner.markdown-preview-github-styles",
         "ms-python.python",
