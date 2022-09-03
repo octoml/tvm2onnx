@@ -130,7 +130,7 @@ class ONNXRuntimeTVMPackage:
     @staticmethod
     def _get_build_folder(tvm_target, tvm_host_target):
         """Uses the target architecture and target options to determinte the build folder
-        for picking up the correct libtvm_runtime.so file
+        for picking up the correct libtvm_runtime.a file
         This is static so it is easily tested.
         """
         cpu_target = tvm_host_target or tvm_target
