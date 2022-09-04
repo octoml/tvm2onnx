@@ -2,6 +2,8 @@
 import os
 import tarfile
 import tempfile
+import pytest
+import uuid
 
 import numpy as np
 import onnx
@@ -21,7 +23,19 @@ from tvm2onnx.onnx_model import ONNXModel
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 
 
-def test_onnx_package():
+@pytest.mark.parametrize(
+    "dtype_str",
+    [
+        "float32",
+        # "int32",
+        # "int64",
+        # "int64",
+        # "int64",
+        # "int64",
+        # "int64",
+    ],
+)
+def test_onnx_package(dtype_str):
     with tempfile.TemporaryDirectory() as tdir:
         source_model = ONNXModel.from_file(_MODEL_PATH)
         source_model.infer_and_update_inputs()
@@ -49,13 +63,13 @@ def test_onnx_package():
         sess_options = onnxruntime.SessionOptions()
         sess_options.register_custom_ops_library(custom_lib)
 
-        engine = onnxruntime.InferenceSession(
+        session = onnxruntime.InferenceSession(
             onnx_model_path,
             providers=["CPUExecutionProvider"],
             provider_options=[{}],
             sess_options=sess_options,
         )
-        output_data = engine.run(output_names=None, input_feed=input_data)
+        output_data = session.run(output_names=None, input_feed=input_data)
 
         sum = input_data["a"] + input_data["b"]
         product = input_data["a"] * input_data["b"]
@@ -75,6 +89,7 @@ def add_constant_onnx_model(model_dir, input_shape, dtype, uniform):
     else:
         c1_data = np.random.randn(*input_shape).astype(dtype)
         c2_data = np.random.randn(*input_shape).astype(dtype)
+
     c1 = make_node(
         "Constant",
         inputs=[],
@@ -88,7 +103,6 @@ def add_constant_onnx_model(model_dir, input_shape, dtype, uniform):
             raw=True,
         ),
     )
-    print(f"const array size {c1_data.size * 4}")
 
     c2 = make_node(
         "Constant",
@@ -116,11 +130,6 @@ def add_constant_onnx_model(model_dir, input_shape, dtype, uniform):
     onnx_proto = make_model(graph)
     onnx.checker.check_model(onnx_proto)
 
-    onnx_model = ONNXModel(model=onnx_proto)
-    onnx_model.infer_and_update_inputs()
-    relay_model = onnx_model.to_relay()
-    relay_model.to_tvm_file("/usr/constant_add.tvm")
-
     model_path = os.path.join(model_dir, "test.onnx")
     convert_model_to_external_data(
         onnx_proto,
@@ -132,12 +141,21 @@ def add_constant_onnx_model(model_dir, input_shape, dtype, uniform):
     return c1_data, c2_data
 
 
-def test_constant_model(dtype):
+@pytest.mark.parametrize(
+    "dtype_str",
+    [
+        "float32",
+        # "int32",
+        # "int64",
+    ],
+)
+def test_constant_model(dtype_str):
+    dtype = np.dtype(dtype_str)
     input_shape = [8, 3, 224, 224]
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, dtype=np.dtype("float32"), uniform=True
+            model_dir=tdir, input_shape=input_shape, dtype=dtype, uniform=True
         )
         onnx_model = ONNXModel.from_file(model_path)
         onnx_model.infer_and_update_inputs()
@@ -154,20 +172,22 @@ def test_constant_model(dtype):
 
         onnx_model_path = os.path.join(model_dir, "test_model.onnx")
         custom_lib = os.path.join(model_dir, "custom_test_model.so")
+        import shutil
+        shutil.copy(onnx_model_path, f"model_{dtype_str}.onnx")
 
         input_data = {}
-        input_data["a"] = np.random.randn(*c1_data.shape).astype(np.dtype("float32"))
+        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
 
         sess_options = onnxruntime.SessionOptions()
         sess_options.register_custom_ops_library(custom_lib)
 
-        engine = onnxruntime.InferenceSession(
+        session = onnxruntime.InferenceSession(
             onnx_model_path,
             providers=["CPUExecutionProvider"],
             provider_options=[{}],
             sess_options=sess_options,
         )
-        result = engine.run(output_names=None, input_feed=input_data)
+        result = session.run(output_names=None, input_feed=input_data)
 
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]

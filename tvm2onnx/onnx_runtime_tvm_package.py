@@ -164,11 +164,13 @@ class ONNXRuntimeTVMPackage:
         self,
         model: relay_model.RelayModel,
         initializer_tensors: typing.List[TensorProto],
+        domain: str,
     ) -> typing.Dict[str, typing.Any]:
         """Gets the cookiecutter config for the ONNX package template.
 
-        :param module_name: The module name.
         :param model: The relay model to be packaged.
+        :param initializer_tensors: List of initializer (constant) tensors.
+        :param domain: Custom op domain.
         :return: config to apply via cookiecutter for the ONNX custom-op template.
         """
         dl_device_type = "kDLCUDA" if "cuda" in str(self._tvm_target) else "kDLCPU"
@@ -262,6 +264,7 @@ class ONNXRuntimeTVMPackage:
             "inputs": inputs,
             "outputs": outputs,
             "initializers": initializers,
+            "domain": domain,
         }
 
     def _sanitize_io_name(self, name: str) -> str:
@@ -291,6 +294,7 @@ class ONNXRuntimeTVMPackage:
         initializers = []
         graph_nodes = []
         custom_op_input_names = []
+        domain = "octoml.tvm"
 
         constants = self._build_vm(model=model, out_dir=build_dir)
 
@@ -306,7 +310,7 @@ class ONNXRuntimeTVMPackage:
             custom_op_input_names.append(name)
             initializers.append(constant_tensor)
 
-        cc_config = self.cookiecutter_config(model, initializers)
+        cc_config = self.cookiecutter_config(model, initializers, domain)
         self._create_from_template(cc_config, self._build_dir)
 
         source = os.path.join(build_dir, "custom_op_library_source")
@@ -350,7 +354,7 @@ class ONNXRuntimeTVMPackage:
             self.custom_op_name,
             custom_op_input_names,
             output_names,
-            domain="octoml.customop",
+            domain=domain,
         )
         graph_nodes.append(custom_op)
 

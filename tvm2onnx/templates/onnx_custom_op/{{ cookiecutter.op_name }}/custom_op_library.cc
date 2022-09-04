@@ -25,7 +25,7 @@ template <typename T1, typename T2, typename T3>
 void cuda_add(int64_t, T3*, const T1*, const T2*, cudaStream_t compute_stream);
 #endif
 
-static const char* c_OpDomain = "octoml.customop";
+static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
 struct OrtCustomOpDomainDeleter {
   explicit OrtCustomOpDomainDeleter(const OrtApi* ort_api) {
@@ -69,7 +69,8 @@ class TempFile {
   }
 
   ~TempFile() {
-    std::remove(filename.c_str());
+    auto rc = std::remove(filename.c_str());
+    std::cout << __FILE__ << " " << __LINE__ << " remove " << filename << " rc = " << rc << std::endl;
   }
   std::string filename;
 };
@@ -77,6 +78,7 @@ class TempFile {
 struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
+      std::cout << __FILE__ << " " << __LINE__ << " ctor" << std::endl;
     // Binary data is linked into this shared library
     // These symbols are defined by adding lines like this to the compile string
     // -Wl,--format=binary -Wl,vm_exec_code.ro -Wl,--format=default
@@ -108,6 +110,7 @@ struct TVMRuntime {
   }
 
   ~TVMRuntime() {
+      std::cout << __FILE__ << " " << __LINE__ << " dtor" << std::endl;
   }
 
   void LateBoundConstants(OrtKernelContext* context) {
