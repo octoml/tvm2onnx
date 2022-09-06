@@ -203,7 +203,6 @@ class ONNXRuntimeTVMPackage:
         index = 0
         for initializer, base_name in zip(initializer_tensors, tvm_constant_names):
             var_name = initializer.name
-            print(f"cookiecutter constant {var_name}")
             dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
             idict = _emit_element(index, var_name, initializer.dims, dtype)
             idict["base_name"] = base_name
@@ -304,7 +303,6 @@ class ONNXRuntimeTVMPackage:
 
         for name, data in constants.items():
             constant_name = name
-            print(f"********************* constant_name {constant_name}")
             tvm_constant_names.append(name)
             np_data = data.numpy()
             constant_tensor = make_tensor(
@@ -317,7 +315,9 @@ class ONNXRuntimeTVMPackage:
             custom_op_input_names.append(constant_name)
             initializers.append(constant_tensor)
 
-        cc_config = self.cookiecutter_config(model, initializers, domain, tvm_constant_names)
+        cc_config = self.cookiecutter_config(
+            model, initializers, domain, tvm_constant_names
+        )
         self._create_from_template(cc_config, self._build_dir)
 
         source = os.path.join(build_dir, "custom_op_library_source")
@@ -382,7 +382,6 @@ class ONNXRuntimeTVMPackage:
             size_threshold=1024,
             convert_attribute=True,
         )
-        print(f"******************************\n{onnx_proto}")
         # onnx_save_dir is the directory where the .onnx model file along with any
         # external constants files are written. There may be multiple files here
         # with unknown names but they all belong in the output file.
@@ -396,8 +395,6 @@ class ONNXRuntimeTVMPackage:
                 all_tensors_to_one_file=False,
                 size_threshold=1024,
             )
-            model_proto = onnx.load_model(onnx_model_file, load_external_data=True)
-            print(model_proto)
             with tarfile.open(onnx_archive, "w") as onnx_tar:
                 for file in get_path_contents(onnx_save_dir):
                     onnx_tar.add(os.path.join(onnx_save_dir, file), file)

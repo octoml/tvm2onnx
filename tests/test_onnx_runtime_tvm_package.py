@@ -34,10 +34,6 @@ _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
         "float32",
         "int32",
         "int64",
-        # "int64",
-        # "int64",
-        # "int64",
-        # "int64",
     ],
 )
 def test_onnx_package(dtype_str):
@@ -142,7 +138,7 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     "dtype_str",
     [
         "int32",
-        "float32",
+        # "float32",
     ],
 )
 def test_constant_model(dtype_str):
@@ -166,26 +162,11 @@ def test_constant_model(dtype_str):
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
 
-
-        # onnx_path = model_path
-        # onnx_model_path = model_path
-
-
-        import shutil
-        shutil.copy(onnx_path, f"model_{dtype_str}.tvm.onnx")
-        # print_path_contents(model_dir)
-
-
         onnx_model_path = os.path.join(model_dir, f"test_model_{dtype_str}.onnx")
         custom_lib = os.path.join(model_dir, f"custom_test_model_{dtype_str}.so")
 
         input_data = {}
         input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
-
-        model_proto = onnx.load_model(onnx_model_path, load_external_data=True)
-        print(model_proto)
-        # breakpoint()
-        # pass
 
         sess_options = onnxruntime.SessionOptions()
         sess_options.register_custom_ops_library(custom_lib)
@@ -198,10 +179,9 @@ def test_constant_model(dtype_str):
         )
         result = session.run(output_names=None, input_feed=input_data)
 
-        # expected = (input_data["a"] + c1_data) * c2_data
-        # actual = result[0]
-        # assert np.allclose(expected, actual)
-
+        expected = (input_data["a"] + c1_data) * c2_data
+        actual = result[0]
+        assert np.allclose(expected, actual)
 
 
 @pytest.mark.parametrize(
@@ -239,41 +219,3 @@ def test_constant_model_src(dtype_str):
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
         assert np.allclose(expected, actual)
-
-
-@pytest.mark.parametrize(
-    "model_path",
-    [
-        "/usr/tvm2onnx/cmodel_float32.onnx",
-        "/usr/tvm2onnx/cmodel_int32.onnx",
-    ],
-)
-def test_test(model_path):
-    with tempfile.TemporaryDirectory() as tdir:
-        onnx_model = ONNXModel.from_file(model_path)
-        onnx_model.infer_and_update_inputs()
-        relay_model = onnx_model.to_relay()
-        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
-        relay_model.package_to_onnx(
-            name=f"test_model",
-            tvm_target="llvm",
-            output_path=onnx_path,
-        )
-        model_dir = os.path.join(tdir, "model")
-        with tarfile.open(onnx_path, "r") as tar:
-            tar.extractall(model_dir)
-        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
-        custom_lib = os.path.join(model_dir, "custom_test_model.so")
-
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.register_custom_ops_library(custom_lib)
-        sess_options.log_verbosity_level = 0
-        # sess_options.log_severity_level = 0
-
-        session = onnxruntime.InferenceSession(
-            onnx_model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
-        )
-        # result = session.run(output_names=None, input_feed=input_data)

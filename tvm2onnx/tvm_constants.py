@@ -37,20 +37,17 @@ def tvm_load_late_bound_constants(self, consts_path):
         for i in range(name_count):
             name_length = struct.unpack("Q", f.read(8))[0]
             name = f.read(name_length).decode("utf-8")
-            print(f"name[{i}] = {name}")
             names.append(name)
         data_count = struct.unpack("Q", f.read(8))[0]
         for i in range(data_count):
             magic = struct.unpack("Q", f.read(8))[0]
             if magic != kTVMNDArrayMagic:
                 raise PackagingError("Data not array")
-            print("ndarray")
             reserved = struct.unpack("Q", f.read(8))[0]
             f.read(reserved)  # skip reserved space
             # DLDevice device;
-            device_type = struct.unpack("I", f.read(4))[0]
-            device_id = struct.unpack("I", f.read(4))[0]
-            print(f"device type {device_type}[{device_id}]")
+            device_type = struct.unpack("I", f.read(4))[0]  # noqa
+            device_id = struct.unpack("I", f.read(4))[0]  # noqa
             # int ndim
             ndim = struct.unpack("I", f.read(4))[0]
             # DLDataType dtype;
