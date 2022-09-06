@@ -9,10 +9,18 @@ RUN apt-get update --fix-missing && \
         build-essential \
         clang-12 \
         git \
-        cmake \
         libopenblas-dev \
         gcc-aarch64-linux-gnu
 
+# Install a more modern cmake version
+WORKDIR /usr
+RUN mkdir cmake_build && \
+    cd cmake_build && \
+    curl -OL https://github.com/Kitware/CMake/releases/download/v3.23.3/cmake-3.23.3-linux-x86_64.sh && \
+    chmod +x cmake-3.23.3-linux-x86_64.sh && \
+    ./cmake-3.23.3-linux-x86_64.sh --skip-license --prefix=/usr && \
+    cd .. && \
+    rm -rf cmake_build
 
 ENV TVM2ONNX_HOME="/usr/tvm2onnx"
 ENV THIRDPARTY_HOME="${TVM2ONNX_HOME}/3rdparty"
