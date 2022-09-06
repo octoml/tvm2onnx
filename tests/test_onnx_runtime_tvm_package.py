@@ -68,7 +68,7 @@ def test_onnx_package():
 
 def add_constant_onnx_model(model_dir, input_shape, uniform=False):
     """Returns an ONNX model with external constants."""
-    a = make_tensor_value_info("a", TensorProto.FLOAT, input_shape)
+    a = make_tensor_value_info("a:0", TensorProto.FLOAT, input_shape)
 
     if uniform:
         c1_data = np.full(shape=input_shape, fill_value=3, dtype=np.dtype("float32"))
@@ -105,7 +105,7 @@ def add_constant_onnx_model(model_dir, input_shape, uniform=False):
         ),
     )
 
-    add = make_node("Add", ["a", "c1"], ["add"])
+    add = make_node("Add", ["a:0", "c1"], ["add"])
     mul = make_node("Mul", ["add", "c2"], ["result"])
 
     result = make_tensor_value_info("result", TensorProto.FLOAT, input_shape)
@@ -150,7 +150,6 @@ def test_constant_model():
             output_path=onnx_path,
         )
         model_dir = os.path.join(tdir, "model")
-        shutil.copy(onnx_path, "/usr/constants.tvm.onnx")
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
 

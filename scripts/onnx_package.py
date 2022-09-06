@@ -9,6 +9,7 @@ import pathlib
 
 from scripts.utils import setup_logging
 from tvm2onnx.relay_model import RelayModel
+from tvm2onnx.onnx_model import ONNXModel
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -17,16 +18,12 @@ def package(
     model_path: str,
     output_path: str,
 ):
-    try:
-        relay_model = RelayModel.from_tvm_file(model_path)
-    except Exception as err:
-        print(err.args[0].replace(r"\n", "\n"))
-    try:
-        relay_model.package_to_onnx(
-            "mnist", tvm_target="llvm", output_path=pathlib.Path(output_path)
-        )
-    except Exception as err:
-        print(err.args[0].replace(r"\n", "\n"))
+    onnx_model = ONNXModel.from_file(model_path)
+    onnx_model.infer_and_update_inputs()
+    relay_model = onnx_model.to_relay()
+    relay_model.package_to_onnx(
+        "mnist", tvm_target="llvm", output_path=pathlib.Path(output_path)
+    )
 
 
 def main():  # pragma: no cover

@@ -164,7 +164,9 @@ shell.nix
 # Direnv stuff
 .envrc
 .direnv
+
 3rdparty/*
+models/*
 *.tvm
 *.onnx
 
