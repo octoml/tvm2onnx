@@ -160,10 +160,6 @@ class ONNXRuntimeTVMPackage:
         """The template dir to copy and modify for this package job."""
         return _CPP_TEMPLATE_PATH
 
-
-    def _normalize_constant_name(self, name: str) -> str:
-        return f"{self._model_name}_{name}"
-
     def cookiecutter_config(
         self,
         model: relay_model.RelayModel,
@@ -307,7 +303,7 @@ class ONNXRuntimeTVMPackage:
         constants = self._build_vm(model=model, out_dir=build_dir)
 
         for name, data in constants.items():
-            constant_name = self._normalize_constant_name(name)
+            constant_name = name
             print(f"********************* constant_name {constant_name}")
             tvm_constant_names.append(name)
             np_data = data.numpy()
@@ -357,7 +353,7 @@ class ONNXRuntimeTVMPackage:
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
                 np.dtype(output.dtype)
             ]
-            tensor = make_tensor_value_info(sanitized_name, tensortype, None)
+            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
             output_tensors.append(tensor)
             output_names.append(sanitized_name)
 
@@ -377,13 +373,16 @@ class ONNXRuntimeTVMPackage:
             initializer=initializers,
         )
 
-        onnx_model = make_model(graph)
+        onnx_proto = make_model(graph)
+        # TODO: rkimball Can't check because of the custom op.
+        # onnx.checker.check_model(onnx_proto)
         convert_model_to_external_data(
-            onnx_model,
+            onnx_proto,
             all_tensors_to_one_file=False,
             size_threshold=1024,
             convert_attribute=True,
         )
+        print(f"******************************\n{onnx_proto}")
         # onnx_save_dir is the directory where the .onnx model file along with any
         # external constants files are written. There may be multiple files here
         # with unknown names but they all belong in the output file.
@@ -391,12 +390,14 @@ class ONNXRuntimeTVMPackage:
             onnx_model_file = os.path.join(onnx_save_dir, f"{self._model_name}.onnx")
             onnx_archive = os.path.join(build_dir, f"{self._model_name}.onnx.tar")
             onnx.save(
-                proto=onnx_model,
+                proto=onnx_proto,
                 f=onnx_model_file,
                 save_as_external_data=True,
                 all_tensors_to_one_file=False,
                 size_threshold=1024,
             )
+            model_proto = onnx.load_model(onnx_model_file, load_external_data=True)
+            print(model_proto)
             with tarfile.open(onnx_archive, "w") as onnx_tar:
                 for file in get_path_contents(onnx_save_dir):
                     onnx_tar.add(os.path.join(onnx_save_dir, file), file)
@@ -451,7 +452,7 @@ class ONNXRuntimeTVMPackage:
         # This call replaces the call to move_late_bound_consts. We aren't saving the
         # constants in TVM's format, we are saving them as part of the onnx model in
         # onnx protobuf format.
-        constant_map = vm_exec.get_late_bound_consts(1024)
+        constant_map = vm_exec.get_late_bound_consts(9)
 
         # Save vm exec code bytes.
         vm_exec_code, mod = vm_exec.save()

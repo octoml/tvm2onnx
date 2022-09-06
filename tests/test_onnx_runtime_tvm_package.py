@@ -87,7 +87,7 @@ def test_onnx_package(dtype_str):
 def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     """Returns an ONNX model with external constants."""
     dtype = np.dtype(dtype_str)
-    a = make_tensor_value_info(f"a_{dtype_str}", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
+    a = make_tensor_value_info(f"a", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
 
     if uniform:
         c1_data = np.full(shape=input_shape, fill_value=3, dtype=dtype)
@@ -96,41 +96,31 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
         c1_data = np.random.randn(*input_shape).astype(dtype)
         c2_data = np.random.randn(*input_shape).astype(dtype)
 
-    c1 = make_node(
-        "Constant",
-        inputs=[],
-        outputs=[f"c1_{dtype_str}"],
-        name=f"c1_{dtype_str}_const_data",
-        value=make_tensor(
-            name=f"c1_{dtype_str}_tensor",
-            data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
-            dims=c1_data.shape,
-            vals=c1_data.flatten().tobytes(),
-            raw=True,
-        ),
+    initializers = []
+    c1 =make_tensor(
+        name=f"c1",
+        data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
+        dims=c1_data.shape,
+        vals=c1_data.flatten().tobytes(),
+        raw=True,
     )
 
-    c2 = make_node(
-        "Constant",
-        inputs=[],
-        outputs=[f"c2_{dtype_str}"],
-        name=f"c2_{dtype_str}_const_data",
-        value=make_tensor(
-            name=f"c2_{dtype_str}_tensor",
-            data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
-            dims=c2_data.shape,
-            vals=c2_data.flatten().tobytes(),
-            raw=True,
-        ),
+    c2 =make_tensor(
+        name=f"c2",
+        data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
+        dims=c2_data.shape,
+        vals=c2_data.flatten().tobytes(),
+        raw=True,
     )
+    initializers = [c1, c2]
 
-    add = make_node("Add", [f"a_{dtype_str}", f"c1_{dtype_str}"], ["add"])
-    mul = make_node("Mul", ["add", f"c2_{dtype_str}"], ["result"])
+    add = make_node("Add", [f"a", f"c1"], ["add"])
+    mul = make_node("Mul", ["add", f"c2"], ["result"])
 
     result = make_tensor_value_info("result", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
 
     graph = make_graph(
-        nodes=[c1, add, c2, mul], name="ab_model", inputs=[a], outputs=[result]
+        nodes=[add, mul], name="ab_model", inputs=[a], outputs=[result], initializer=initializers
     )
 
     onnx_proto = make_model(graph)
@@ -149,16 +139,15 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
 
 
 @pytest.mark.parametrize(
-    "dtype_str,input_shape",
+    "dtype_str",
     [
-        ("int32", [1, 2, 8, 8]),
-        ("float32", [1, 2, 7, 7]),
-        # "int64",
+        "int32",
+        "float32",
     ],
 )
-def test_constant_model(dtype_str, input_shape):
+def test_constant_model(dtype_str):
     dtype = np.dtype(dtype_str)
-    # input_shape = [1, 2, 8, 8]
+    input_shape = [1, 2, 8, 8]
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
@@ -178,18 +167,23 @@ def test_constant_model(dtype_str, input_shape):
             tar.extractall(model_dir)
 
 
+        # onnx_path = model_path
+        # onnx_model_path = model_path
+
+
         import shutil
         shutil.copy(onnx_path, f"model_{dtype_str}.tvm.onnx")
-        print_path_contents(model_dir)
+        # print_path_contents(model_dir)
 
 
         onnx_model_path = os.path.join(model_dir, f"test_model_{dtype_str}.onnx")
         custom_lib = os.path.join(model_dir, f"custom_test_model_{dtype_str}.so")
 
         input_data = {}
-        input_data[f"a_{dtype_str}"] = np.random.randn(*c1_data.shape).astype(dtype)
+        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
 
-        # model_proto = onnx.load_model(onnx_model_path, load_external_data=True)
+        model_proto = onnx.load_model(onnx_model_path, load_external_data=True)
+        print(model_proto)
         # breakpoint()
         # pass
 
@@ -204,7 +198,45 @@ def test_constant_model(dtype_str, input_shape):
         )
         result = session.run(output_names=None, input_feed=input_data)
 
-        expected = (input_data[f"a_{dtype_str}"] + c1_data) * c2_data
+        # expected = (input_data["a"] + c1_data) * c2_data
+        # actual = result[0]
+        # assert np.allclose(expected, actual)
+
+
+
+@pytest.mark.parametrize(
+    "dtype_str",
+    [
+        "int32",
+        "float32",
+    ],
+)
+def test_constant_model_src(dtype_str):
+    dtype = np.dtype(dtype_str)
+    input_shape = [1, 2, 8, 8]
+    with tempfile.TemporaryDirectory() as tdir:
+        model_path = os.path.join(tdir, "test.onnx")
+        c1_data, c2_data = add_constant_onnx_model(
+            model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
+        )
+
+        input_data = {}
+        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
+
+        model_proto = onnx.load_model(model_path, load_external_data=True)
+        print(model_proto)
+
+        sess_options = onnxruntime.SessionOptions()
+
+        session = onnxruntime.InferenceSession(
+            model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
+        )
+        result = session.run(output_names=None, input_feed=input_data)
+
+        expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
         assert np.allclose(expected, actual)
 
@@ -212,8 +244,6 @@ def test_constant_model(dtype_str, input_shape):
 @pytest.mark.parametrize(
     "model_path",
     [
-        "/usr/tvm2onnx/tests/testdata/abtest.onnx",
-        "/usr/tvm2onnx/tests/testdata/mnist.onnx",
         "/usr/tvm2onnx/cmodel_float32.onnx",
         "/usr/tvm2onnx/cmodel_int32.onnx",
     ],
