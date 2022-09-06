@@ -197,9 +197,6 @@ def test_constant_model_src(dtype_str):
         input_data = {}
         input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
 
-        model_proto = onnx.load_model(model_path, load_external_data=True)
-        print(model_proto)
-
         sess_options = onnxruntime.SessionOptions()
 
         session = onnxruntime.InferenceSession(
