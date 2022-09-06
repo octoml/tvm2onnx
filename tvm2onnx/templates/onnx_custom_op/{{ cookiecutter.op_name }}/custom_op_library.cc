@@ -123,7 +123,7 @@ struct TVMRuntime {
     DLDataType _{{details.name}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
     ::tvm::runtime::NDArray _{{details.name}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device_type);
     _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
-    const_map.Set("{{details.name}}", _{{details.name}}_ndarray);
+    const_map.Set("{{details.base_name}}", _{{details.name}}_ndarray);
 
     {% endfor %}
 
@@ -258,7 +258,10 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
   };
 
   const char* GetName() const {
-    return "{{cookiecutter.custom_op_name}}"; };
+    auto name = "{{cookiecutter.custom_op_name}}";
+    std::cout << __FILE__ << " " << __LINE__ << " op name '" << name << "'" << std::endl;
+    return name;
+  };
 
 #ifdef USE_CUDA
   const char* GetExecutionProviderType() const { return "CUDAExecutionProvider"; };

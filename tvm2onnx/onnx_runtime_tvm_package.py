@@ -160,11 +160,16 @@ class ONNXRuntimeTVMPackage:
         """The template dir to copy and modify for this package job."""
         return _CPP_TEMPLATE_PATH
 
+
+    def _normalize_constant_name(self, name: str) -> str:
+        return f"{self._model_name}_{name}"
+
     def cookiecutter_config(
         self,
         model: relay_model.RelayModel,
         initializer_tensors: typing.List[TensorProto],
         domain: str,
+        tvm_constant_names: typing.List[str],
     ) -> typing.Dict[str, typing.Any]:
         """Gets the cookiecutter config for the ONNX package template.
 
@@ -200,10 +205,12 @@ class ONNXRuntimeTVMPackage:
         #    Inputs
         # All constants are first with the inputs following.
         index = 0
-        for initializer in initializer_tensors:
+        for initializer, base_name in zip(initializer_tensors, tvm_constant_names):
             var_name = initializer.name
+            print(f"cookiecutter constant {var_name}")
             dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
             idict = _emit_element(index, var_name, initializer.dims, dtype)
+            idict["base_name"] = base_name
             initializers.append(idict)
             index += 1
 
@@ -294,23 +301,27 @@ class ONNXRuntimeTVMPackage:
         initializers = []
         graph_nodes = []
         custom_op_input_names = []
+        tvm_constant_names = []
         domain = "octoml.tvm"
 
         constants = self._build_vm(model=model, out_dir=build_dir)
 
         for name, data in constants.items():
+            constant_name = self._normalize_constant_name(name)
+            print(f"********************* constant_name {constant_name}")
+            tvm_constant_names.append(name)
             np_data = data.numpy()
             constant_tensor = make_tensor(
-                name=name,
+                name=constant_name,
                 data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np_data.dtype],
                 dims=np_data.shape,
                 vals=np_data.flatten().tobytes(),
                 raw=True,
             )
-            custom_op_input_names.append(name)
+            custom_op_input_names.append(constant_name)
             initializers.append(constant_tensor)
 
-        cc_config = self.cookiecutter_config(model, initializers, domain)
+        cc_config = self.cookiecutter_config(model, initializers, domain, tvm_constant_names)
         self._create_from_template(cc_config, self._build_dir)
 
         source = os.path.join(build_dir, "custom_op_library_source")
@@ -360,7 +371,7 @@ class ONNXRuntimeTVMPackage:
 
         graph = make_graph(
             nodes=graph_nodes,
-            name="tvm_ort",
+            name=f"{self._model_name}_{uuid.uuid4().hex}",
             inputs=input_tensors,
             outputs=output_tensors,
             initializer=initializers,
