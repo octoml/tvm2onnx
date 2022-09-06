@@ -70,7 +70,6 @@ class TempFile {
 
   ~TempFile() {
     auto rc = std::remove(filename.c_str());
-    std::cout << __FILE__ << " " << __LINE__ << " remove " << filename << " rc = " << rc << std::endl;
   }
   std::string filename;
 };
@@ -78,7 +77,6 @@ class TempFile {
 struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
-      std::cout << __FILE__ << " " << __LINE__ << " ctor" << std::endl;
     // Binary data is linked into this shared library
     // These symbols are defined by adding lines like this to the compile string
     // -Wl,--format=binary -Wl,vm_exec_code.ro -Wl,--format=default
@@ -110,7 +108,6 @@ struct TVMRuntime {
   }
 
   ~TVMRuntime() {
-      std::cout << __FILE__ << " " << __LINE__ << " dtor" << std::endl;
   }
 
   void LateBoundConstants(OrtKernelContext* context) {
@@ -259,7 +256,6 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
 
   const char* GetName() const {
     auto name = "{{cookiecutter.custom_op_name}}";
-    std::cout << __FILE__ << " " << __LINE__ << " op name '" << name << "'" << std::endl;
     return name;
   };
 

@@ -3,12 +3,6 @@ import os
 import tarfile
 import tempfile
 import pytest
-import uuid
-import gc
-import sys
-
-# breakpoint()
-# sys.path = ["/usr/tvm2onnx/3rdparty/onnxruntime/build/Linux/RelWithDebInfo/", *sys.path]
 
 import numpy as np
 import onnx
