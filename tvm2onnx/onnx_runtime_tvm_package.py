@@ -297,7 +297,7 @@ class ONNXRuntimeTVMPackage:
         graph_nodes = []
         custom_op_input_names = []
         tvm_constant_names = []
-        domain = "octoml.tvm"
+        domain = "octoml.ai"
 
         constants = self._build_vm(model=model, out_dir=build_dir)
 

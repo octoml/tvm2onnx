@@ -26,8 +26,8 @@ _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
     "dtype_str",
     [
         "float32",
-        "int32",
-        "int64",
+        # "int32",
+        # "int64",
     ],
 )
 def test_onnx_package(dtype_str):
@@ -131,8 +131,8 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
 @pytest.mark.parametrize(
     "dtype_str",
     [
-        "int32",
-        # "float32",
+        "float32",
+        # "int32",
     ],
 )
 def test_constant_model(dtype_str):
@@ -178,35 +178,35 @@ def test_constant_model(dtype_str):
         assert np.allclose(expected, actual)
 
 
-@pytest.mark.parametrize(
-    "dtype_str",
-    [
-        "int32",
-        "float32",
-    ],
-)
-def test_constant_model_src(dtype_str):
-    dtype = np.dtype(dtype_str)
-    input_shape = [1, 2, 8, 8]
-    with tempfile.TemporaryDirectory() as tdir:
-        model_path = os.path.join(tdir, "test.onnx")
-        c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
-        )
+# @pytest.mark.parametrize(
+#     "dtype_str",
+#     [
+#         "int32",
+#         "float32",
+#     ],
+# )
+# def test_constant_model_src(dtype_str):
+#     dtype = np.dtype(dtype_str)
+#     input_shape = [1, 2, 8, 8]
+#     with tempfile.TemporaryDirectory() as tdir:
+#         model_path = os.path.join(tdir, "test.onnx")
+#         c1_data, c2_data = add_constant_onnx_model(
+#             model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
+#         )
 
-        input_data = {}
-        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
+#         input_data = {}
+#         input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
 
-        sess_options = onnxruntime.SessionOptions()
+#         sess_options = onnxruntime.SessionOptions()
 
-        session = onnxruntime.InferenceSession(
-            model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
-        )
-        result = session.run(output_names=None, input_feed=input_data)
+#         session = onnxruntime.InferenceSession(
+#             model_path,
+#             providers=["CPUExecutionProvider"],
+#             provider_options=[{}],
+#             sess_options=sess_options,
+#         )
+#         result = session.run(output_names=None, input_feed=input_data)
 
-        expected = (input_data["a"] + c1_data) * c2_data
-        actual = result[0]
-        assert np.allclose(expected, actual)
+#         expected = (input_data["a"] + c1_data) * c2_data
+#         actual = result[0]
+#         assert np.allclose(expected, actual)
