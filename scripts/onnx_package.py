@@ -17,7 +17,7 @@ def package(
     model_path: str,
     output_path: str,
 ):
-    onnx_model = ONNXModel.from_file(model_path)
+    onnx_model = ONNXModel.from_file(pathlib.Path(model_path))
     onnx_model.infer_and_update_inputs()
     relay_model = onnx_model.to_relay()
     relay_model.package_to_onnx(
