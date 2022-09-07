@@ -4,6 +4,7 @@ import os
 import pytest
 import tvm
 
+
 def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"

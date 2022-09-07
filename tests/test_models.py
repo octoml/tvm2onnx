@@ -1,12 +1,13 @@
-import pytest
 import os
-import tempfile
 import tarfile
+import tempfile
+
 import numpy as np
 import onnxruntime
+import pytest
 
-from tvm2onnx.utils import get_path_contents
 from tvm2onnx.onnx_model import ONNXModel
+from tvm2onnx.utils import get_path_contents
 
 _MODELS_DIR = os.path.join(os.path.dirname(__file__), "../models")
 import os
@@ -56,4 +57,4 @@ def test_models_in_models_dir():
                 sess_options=sess_options,
             )
 
-            output_data = engine.run(output_names=None, input_feed=input_data)
+            engine.run(output_names=None, input_feed=input_data)
