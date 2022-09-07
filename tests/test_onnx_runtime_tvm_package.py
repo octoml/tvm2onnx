@@ -67,15 +67,23 @@ def get_input_data_for_model_with_fixed_shapes(onnx_model: ModelProto) -> Dict[A
 
 
 def generate_input_shapes_dtypes(onnx_model_path):
+    def get_onnx_input_names(model: ModelProto) -> List[AnyStr]:
+        inputs = [node.name for node in model.graph.input]
+        initializer = [node.name for node in model.graph.initializer]
+        inputs = list(set(inputs) - set(initializer))
+        return sorted(inputs)
+
     onnx_model = onnx.load_model(onnx_model_path)
     input_shapes = {}
     input_dtypes = {}
+    valid_names = get_onnx_input_names(onnx_model)
     for inp in onnx_model.graph.input:
         name = inp.name
-        shape = [d.dim_value for d in inp.type.tensor_type.shape.dim]
-        input_shapes[name] = shape
-        dtype = inp.type.tensor_type.elem_type
-        input_dtypes[name] = onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[dtype]
+        if name in valid_names:
+            shape = [d.dim_value for d in inp.type.tensor_type.shape.dim]
+            input_shapes[name] = shape
+            dtype = inp.type.tensor_type.elem_type
+            input_dtypes[name] = onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[dtype]
 
     return input_shapes, input_dtypes
 
