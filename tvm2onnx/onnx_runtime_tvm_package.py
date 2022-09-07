@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-#  type: ignore
 """ONNX package job."""
 import os
 import pathlib
@@ -230,13 +228,13 @@ class ONNXRuntimeTVMPackage:
             dtype = model.input_dtypes[iname]
             onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
             input_types.append(ONNXTensorElementDataType[onnx_type])
-            shape = f"{{{', '.join(map(str, ishape))}}}"
-            input_shapes.append(shape)
+            shape_str = f"{{{', '.join(map(str, ishape))}}}"
+            input_shapes.append(shape_str)
 
         for index, initializer in enumerate(initializer_tensors):
             input_types.append(ONNXTensorElementDataType[initializer.data_type])
-            shape = f"{{{', '.join(map(str, initializer.dims))}}}"
-            input_shapes.append(shape)
+            shape_str = f"{{{', '.join(map(str, initializer.dims))}}}"
+            input_shapes.append(shape_str)
 
         output_dtypes = []
         output_shapes = []
@@ -244,8 +242,8 @@ class ONNXRuntimeTVMPackage:
             dtype = out_info.dtype
             onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
             output_dtypes.append(ONNXTensorElementDataType[onnx_type])
-            shape = f"{{{', '.join(map(str, out_info.shape))}}}"
-            output_shapes.append(shape)
+            shape_str = f"{{{', '.join(map(str, out_info.shape))}}}"
+            output_shapes.append(shape_str)
 
         # Give the custom op a globally unique name
         self.custom_op_name = f"op_{uuid.uuid4().hex}"
@@ -389,7 +387,7 @@ class ONNXRuntimeTVMPackage:
                     onnx_tar.add(os.path.join(onnx_save_dir, file), file)
                 onnx_tar.add(os.path.join(build_dir, custom_op_name), custom_op_name)
 
-            return onnx_archive
+            return pathlib.Path(onnx_archive)
 
     def build(self, model: relay_model.RelayModel) -> pathlib.Path:
         """Packages the given model.

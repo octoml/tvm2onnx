@@ -2,7 +2,6 @@
 import os
 import tarfile
 import tempfile
-import shutil
 
 import numpy as np
 import onnx
@@ -16,6 +15,7 @@ from onnx.helper import (
     make_tensor,
     make_tensor_value_info,
 )
+
 from tvm2onnx.onnx_model import ONNXModel
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")

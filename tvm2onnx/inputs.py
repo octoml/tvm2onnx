@@ -4,10 +4,10 @@ import numpy as np
 
 from tvm2onnx.error import InputUnexpectedDynamicShapeError
 
-Shape = typing.Sequence[int]
+Shape = typing.List[int]
 Dtype = str
-InputShapes = typing.Mapping[str, Shape]
-InputDtypes = typing.Mapping[str, Dtype]
+InputShapes = typing.Dict[str, Shape]
+InputDtypes = typing.Dict[str, Dtype]
 
 
 def is_dynamic_dim(dim: typing.Any) -> bool:

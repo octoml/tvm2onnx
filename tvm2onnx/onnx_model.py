@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-#  type: ignore
 """Defines a representation of ONNX models."""
 
 from __future__ import annotations
@@ -74,7 +72,9 @@ class ONNXHasDynamicInputs(TVM2ONNXError):
 class ONNXModel(ModelBase):
     """Represents a Model in ONNX format."""
 
-    custom_op_libs: typing.List[str] = dataclasses.field(default_factory=list)
+    def __init__(self, *args, custom_op_libs: typing.List[str] = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.custom_op_libs = custom_op_libs or []
 
     @classmethod
     def from_file(
@@ -93,7 +93,7 @@ class ONNXModel(ModelBase):
         if not os.path.exists(model_path):
             raise ONNXIngestError(f"File '{model_path}' not found")
         try:
-            onnx_proto = ONNXModel._load_model_from_tar_file(model_tar=model_path)
+            onnx_proto = ONNXModel._load_model_from_tar_file(model_tar_path=model_path)
             LOG.info("ONNXModel successfully loaded from tar file")
         except ONNXNotTarFileError:
             try:
@@ -110,7 +110,7 @@ class ONNXModel(ModelBase):
         )
 
     @staticmethod
-    def _load_model_from_tar_file(model_tar: pathlib.Path) -> onnx.ModelProto:
+    def _load_model_from_tar_file(model_tar_path: pathlib.Path) -> onnx.ModelProto:
         """Extracts an onnx model from the given bytes if they represent a tarfile.
 
         :param model_bytes: the bytes to extract a model from.
@@ -120,13 +120,13 @@ class ONNXModel(ModelBase):
         :raise ONNXIngestMultipleAssetsInTarFileError: if there is more than one file ending in
             .onnx within the tarfile, apart from MacOS metadata files.
         """
-        if not tarfile.is_tarfile(str(model_tar)):
+        if not tarfile.is_tarfile(str(model_tar_path)):
             LOG.info("Model bytes do not represent a tarfile. Halting tar extraction.")
             raise ONNXNotTarFileError("Model bytes don't represent a tarfile.")
 
         LOG.info("Extracting ONNX model from given tarfile byte.")
         with contextlib.ExitStack() as stack:
-            model_tar = stack.enter_context(tarfile.open(str(model_tar)))
+            model_tar = stack.enter_context(tarfile.open(str(model_tar_path)))
             members = model_tar.getmembers()
             onnx_members = [
                 m
