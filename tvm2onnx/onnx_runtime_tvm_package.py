@@ -448,7 +448,7 @@ class ONNXRuntimeTVMPackage:
         # This call replaces the call to move_late_bound_consts. We aren't saving the
         # constants in TVM's format, we are saving them as part of the onnx model in
         # onnx protobuf format.
-        constant_map = vm_exec.get_late_bound_consts(9)
+        constant_map = vm_exec.get_late_bound_consts(1024)
 
         # Save vm exec code bytes.
         vm_exec_code, mod = vm_exec.save()
