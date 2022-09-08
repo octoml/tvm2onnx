@@ -30,7 +30,7 @@ def cookiecut_package(
     :param output_dir: the directory where the cookiecut package will go.
     :param config: the cookiecutter config to use.
     """
-    LOG.info(
+    LOG.debug(
         "Cookiecutting package from template.",
         template_dir=template_dir,
         output_dir=output_dir,

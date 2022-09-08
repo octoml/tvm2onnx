@@ -124,7 +124,7 @@ class ONNXModel(ModelBase):
             LOG.info("Model bytes do not represent a tarfile. Halting tar extraction.")
             raise ONNXNotTarFileError("Model bytes don't represent a tarfile.")
 
-        LOG.info("Extracting ONNX model from given tarfile byte.")
+        LOG.info("Extracting ONNX model from given tarfile.")
         with contextlib.ExitStack() as stack:
             model_tar = stack.enter_context(tarfile.open(str(model_tar_path)))
             members = model_tar.getmembers()

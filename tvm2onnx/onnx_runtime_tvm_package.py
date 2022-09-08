@@ -164,11 +164,14 @@ class ONNXRuntimeTVMPackage:
         self,
         model: relay_model.RelayModel,
         initializer_tensors: typing.List[TensorProto],
+        domain: str,
+        tvm_constant_names: typing.List[str],
     ) -> typing.Dict[str, typing.Any]:
         """Gets the cookiecutter config for the ONNX package template.
 
-        :param module_name: The module name.
         :param model: The relay model to be packaged.
+        :param initializer_tensors: List of initializer (constant) tensors.
+        :param domain: Custom op domain.
         :return: config to apply via cookiecutter for the ONNX custom-op template.
         """
         dl_device_type = "kDLCUDA" if "cuda" in str(self._tvm_target) else "kDLCPU"
@@ -198,10 +201,11 @@ class ONNXRuntimeTVMPackage:
         #    Inputs
         # All constants are first with the inputs following.
         index = 0
-        for initializer in initializer_tensors:
+        for initializer, base_name in zip(initializer_tensors, tvm_constant_names):
             var_name = initializer.name
             dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
             idict = _emit_element(index, var_name, initializer.dims, dtype)
+            idict["base_name"] = base_name
             initializers.append(idict)
             index += 1
 
@@ -262,6 +266,7 @@ class ONNXRuntimeTVMPackage:
             "inputs": inputs,
             "outputs": outputs,
             "initializers": initializers,
+            "domain": domain,
         }
 
     def _sanitize_io_name(self, name: str) -> str:
@@ -291,10 +296,13 @@ class ONNXRuntimeTVMPackage:
         initializers = []
         graph_nodes = []
         custom_op_input_names = []
+        tvm_constant_names = []
+        domain = "octoml.ai"
 
         constants = self._build_vm(model=model, out_dir=build_dir)
 
         for name, data in constants.items():
+            tvm_constant_names.append(name)
             np_data = data.numpy()
             constant_tensor = make_tensor(
                 name=name,
@@ -306,7 +314,9 @@ class ONNXRuntimeTVMPackage:
             custom_op_input_names.append(name)
             initializers.append(constant_tensor)
 
-        cc_config = self.cookiecutter_config(model, initializers)
+        cc_config = self.cookiecutter_config(
+            model, initializers, domain, tvm_constant_names
+        )
         self._create_from_template(cc_config, self._build_dir)
 
         source = os.path.join(build_dir, "custom_op_library_source")
@@ -342,7 +352,7 @@ class ONNXRuntimeTVMPackage:
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
                 np.dtype(output.dtype)
             ]
-            tensor = make_tensor_value_info(sanitized_name, tensortype, None)
+            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
             output_tensors.append(tensor)
             output_names.append(sanitized_name)
 
@@ -350,21 +360,23 @@ class ONNXRuntimeTVMPackage:
             self.custom_op_name,
             custom_op_input_names,
             output_names,
-            domain="octoml.customop",
+            domain=domain,
         )
         graph_nodes.append(custom_op)
 
         graph = make_graph(
             nodes=graph_nodes,
-            name="tvm_ort",
+            name=f"{self._model_name}_{uuid.uuid4().hex}",
             inputs=input_tensors,
             outputs=output_tensors,
             initializer=initializers,
         )
 
-        onnx_model = make_model(graph)
+        onnx_proto = make_model(graph)
+        # TODO: rkimball Can't check because of the custom op.
+        # onnx.checker.check_model(onnx_proto)
         convert_model_to_external_data(
-            onnx_model,
+            onnx_proto,
             all_tensors_to_one_file=False,
             size_threshold=1024,
             convert_attribute=True,
@@ -376,7 +388,7 @@ class ONNXRuntimeTVMPackage:
             onnx_model_file = os.path.join(onnx_save_dir, f"{self._model_name}.onnx")
             onnx_archive = os.path.join(build_dir, f"{self._model_name}.onnx.tar")
             onnx.save(
-                proto=onnx_model,
+                proto=onnx_proto,
                 f=onnx_model_file,
                 save_as_external_data=True,
                 all_tensors_to_one_file=False,

@@ -1,10 +1,12 @@
 import os
+import pathlib
 import tarfile
 import tempfile
 
 import numpy as np
 import onnxruntime
 import pytest
+import structlog
 
 from tvm2onnx.onnx_model import ONNXModel
 from tvm2onnx.utils import get_path_contents
@@ -12,13 +14,23 @@ from tvm2onnx.utils import get_path_contents
 _MODELS_DIR = os.path.join(os.path.dirname(__file__), "../models")
 import os
 
+LOG = structlog.get_logger(__name__)
+
+
+def gather_models():
+    if os.path.exists(_MODELS_DIR):
+        for model_name in get_path_contents(_MODELS_DIR):
+            if pathlib.Path(model_name).suffix == ".onnx":
+                yield model_name
+
 
 @pytest.mark.slow
-def test_models_in_models_dir():
+@pytest.mark.parametrize("model_name", gather_models())
+def test_models_in_models_dir(model_name):
     """So far this test is just to see if models fail to either load or run"""
-
-    for model_name in get_path_contents(_MODELS_DIR):
-        model_path = os.path.join(_MODELS_DIR, model_name)
+    try:
+        model_path = os.path.abspath(os.path.join(_MODELS_DIR, model_name))
+        print(model_path)
         source_model = ONNXModel.from_file(model_path)
         source_model.infer_and_update_inputs()
         for name, shape in source_model.input_shapes.items():
@@ -58,3 +70,6 @@ def test_models_in_models_dir():
             )
 
             engine.run(output_names=None, input_feed=input_data)
+    except Exception as e:
+        assert False
+        LOG.exception(e)

@@ -6,7 +6,7 @@ import tempfile
 import numpy as np
 import onnx
 import onnxruntime
-from onnx import TensorProto
+import pytest
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
     make_graph,
@@ -15,13 +15,22 @@ from onnx.helper import (
     make_tensor,
     make_tensor_value_info,
 )
+from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 
 from tvm2onnx.onnx_model import ONNXModel
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 
 
-def test_onnx_package():
+@pytest.mark.parametrize(
+    "dtype_str",
+    [
+        "float32",
+        # "int32",
+        # "int64",
+    ],
+)
+def test_onnx_package(dtype_str):
     with tempfile.TemporaryDirectory() as tdir:
         source_model = ONNXModel.from_file(_MODEL_PATH)
         source_model.infer_and_update_inputs()
@@ -49,13 +58,13 @@ def test_onnx_package():
         sess_options = onnxruntime.SessionOptions()
         sess_options.register_custom_ops_library(custom_lib)
 
-        engine = onnxruntime.InferenceSession(
+        session = onnxruntime.InferenceSession(
             onnx_model_path,
             providers=["CPUExecutionProvider"],
             provider_options=[{}],
             sess_options=sess_options,
         )
-        output_data = engine.run(output_names=None, input_feed=input_data)
+        output_data = session.run(output_names=None, input_feed=input_data)
 
         sum = input_data["a"] + input_data["b"]
         product = input_data["a"] * input_data["b"]
@@ -65,61 +74,53 @@ def test_onnx_package():
         assert np.allclose(product, actual_product)
 
 
-def add_constant_onnx_model(model_dir, input_shape, uniform=False):
+def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     """Returns an ONNX model with external constants."""
-    a = make_tensor_value_info("a:0", TensorProto.FLOAT, input_shape)
+    dtype = np.dtype(dtype_str)
+    a = make_tensor_value_info("a", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
 
     if uniform:
-        c1_data = np.full(shape=input_shape, fill_value=3, dtype=np.dtype("float32"))
-        c2_data = np.full(shape=input_shape, fill_value=4, dtype=np.dtype("float32"))
+        c1_data = np.full(shape=input_shape, fill_value=3, dtype=dtype)
+        c2_data = np.full(shape=input_shape, fill_value=4, dtype=dtype)
     else:
-        c1_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
-        c2_data = np.random.randn(*input_shape).astype(np.dtype("float32"))
-    c1 = make_node(
-        "Constant",
-        inputs=[],
-        outputs=["c1"],
-        name="c1_const_data",
-        value=make_tensor(
-            name="c1_tensor",
-            data_type=TensorProto.FLOAT,
-            dims=c1_data.shape,
-            vals=c1_data.flatten().tobytes(),
-            raw=True,
-        ),
-    )
-    print(f"const array size {c1_data.size * 4}")
+        c1_data = np.random.randn(*input_shape).astype(dtype)
+        c2_data = np.random.randn(*input_shape).astype(dtype)
 
-    c2 = make_node(
-        "Constant",
-        inputs=[],
-        outputs=["c2"],
-        name="c2_const_data",
-        value=make_tensor(
-            name="c2_tensor",
-            data_type=TensorProto.FLOAT,
-            dims=c2_data.shape,
-            vals=c2_data.flatten().tobytes(),
-            raw=True,
-        ),
+    initializers = []
+    c1 = make_tensor(
+        name="c1",
+        data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
+        dims=c1_data.shape,
+        vals=c1_data.flatten().tobytes(),
+        raw=True,
     )
 
-    add = make_node("Add", ["a:0", "c1"], ["add"])
+    c2 = make_tensor(
+        name="c2",
+        data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
+        dims=c2_data.shape,
+        vals=c2_data.flatten().tobytes(),
+        raw=True,
+    )
+    initializers = [c1, c2]
+
+    add = make_node("Add", ["a", "c1"], ["add"])
     mul = make_node("Mul", ["add", "c2"], ["result"])
 
-    result = make_tensor_value_info("result", TensorProto.FLOAT, input_shape)
+    result = make_tensor_value_info(
+        "result", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape
+    )
 
     graph = make_graph(
-        nodes=[c1, add, c2, mul], name="ab_model", inputs=[a], outputs=[result]
+        nodes=[add, mul],
+        name="ab_model",
+        inputs=[a],
+        outputs=[result],
+        initializer=initializers,
     )
 
     onnx_proto = make_model(graph)
     onnx.checker.check_model(onnx_proto)
-
-    onnx_model = ONNXModel(model=onnx_proto)
-    onnx_model.infer_and_update_inputs()
-    relay_model = onnx_model.to_relay()
-    relay_model.to_tvm_file("/usr/constant_add.tvm")
 
     model_path = os.path.join(model_dir, "test.onnx")
     convert_model_to_external_data(
@@ -129,22 +130,31 @@ def add_constant_onnx_model(model_dir, input_shape, uniform=False):
         convert_attribute=True,
     )
     onnx.save(onnx_proto, model_path)
+    onnx.save(onnx_proto, f"cmodel_{dtype_str}.onnx")
     return c1_data, c2_data
 
 
-def test_constant_model():
-    input_shape = [8, 3, 224, 224]
+@pytest.mark.parametrize(
+    "dtype_str",
+    [
+        "float32",
+        # "int32",
+    ],
+)
+def test_constant_model(dtype_str):
+    dtype = np.dtype(dtype_str)
+    input_shape = [1, 2, 8, 8]
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, uniform=True
+            model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
         )
         onnx_model = ONNXModel.from_file(model_path)
         onnx_model.infer_and_update_inputs()
         relay_model = onnx_model.to_relay()
         onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
         relay_model.package_to_onnx(
-            name="test_model",
+            name=f"test_model_{dtype_str}",
             tvm_target="llvm",
             output_path=onnx_path,
         )
@@ -152,22 +162,58 @@ def test_constant_model():
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
 
-        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
-        custom_lib = os.path.join(model_dir, "custom_test_model.so")
+        onnx_model_path = os.path.join(model_dir, f"test_model_{dtype_str}.onnx")
+        custom_lib = os.path.join(model_dir, f"custom_test_model_{dtype_str}.so")
 
         input_data = {}
-        input_data["a"] = np.random.randn(*c1_data.shape).astype(np.dtype("float32"))
+        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
 
         sess_options = onnxruntime.SessionOptions()
         sess_options.register_custom_ops_library(custom_lib)
 
-        engine = onnxruntime.InferenceSession(
+        session = onnxruntime.InferenceSession(
             onnx_model_path,
             providers=["CPUExecutionProvider"],
             provider_options=[{}],
             sess_options=sess_options,
         )
-        result = engine.run(output_names=None, input_feed=input_data)
+        result = session.run(output_names=None, input_feed=input_data)
+
+        expected = (input_data["a"] + c1_data) * c2_data
+        actual = result[0]
+        assert np.allclose(expected, actual)
+
+
+@pytest.mark.parametrize(
+    "dtype_str",
+    [
+        "int32",
+        "float32",
+    ],
+)
+def test_constant_model_src(dtype_str):
+    """Check that the source models generated for convertion to tvm custom op actually work
+    as onnx models."""
+    dtype = np.dtype(dtype_str)
+    input_shape = [1, 2, 8, 8]
+    with tempfile.TemporaryDirectory() as tdir:
+        model_path = os.path.join(tdir, "test.onnx")
+        c1_data, c2_data = add_constant_onnx_model(
+            model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
+        )
+
+        input_data = {}
+        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
+
+        sess_options = onnxruntime.SessionOptions()
+
+        session = onnxruntime.InferenceSession(
+            model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
+        )
+        result = session.run(output_names=None, input_feed=input_data)
 
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]

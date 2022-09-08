@@ -1,3 +1,4 @@
-This directory is excluded from the docker context so it's contents are not copied
-to the container. Instead this directory is mounted to /usr/tvm2onnx/models and is used for
-the test_models slow unit test.
+Directory for fetch_models.py model download
+
+This directory is mounted from the host filesystem to the docker container
+so models are downloaded directly to the host, not the container.
