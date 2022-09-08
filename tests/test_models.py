@@ -18,9 +18,10 @@ LOG = structlog.get_logger(__name__)
 
 
 def gather_models():
-    for model_name in get_path_contents(_MODELS_DIR):
-        if pathlib.Path(model_name).suffix == ".onnx":
-            yield model_name
+    if os.path.exists(_MODELS_DIR):
+        for model_name in get_path_contents(_MODELS_DIR):
+            if pathlib.Path(model_name).suffix == ".onnx":
+                yield model_name
 
 
 @pytest.mark.slow
