@@ -60,7 +60,8 @@ line_length = 88
 filterwarnings = ["ignore::DeprecationWarning"]
 addopts = ["--no-cov-on-fail"]
 markers= [
-    "cuda: mark a test as cuda only (deselect with '-m \"not cuda\"')"
+    "cuda: mark a test as cuda only (deselect with '-m \"not cuda\"')",
+    "slow: mark a test as slow (run all slow tests with --runslow)"
 ]
 
 [build-system]
