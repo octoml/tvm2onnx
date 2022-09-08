@@ -179,6 +179,8 @@ class ONNXRuntimeTVMPackage:
         def _emit_element(index, name, shape, dtype) -> typing.Dict[str, typing.Any]:
             onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
             element_count = 1
+            # shape can contain funky tvm types so convert everything to int
+            shape = list(map(int, shape))
             for dim in shape:
                 element_count *= dim
             idict: typing.Dict[str, typing.Any] = {
