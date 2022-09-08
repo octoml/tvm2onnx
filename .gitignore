@@ -167,6 +167,6 @@ shell.nix
 
 3rdparty/*
 models/*
+!models/README.md
 *.tvm
 *.onnx
-
