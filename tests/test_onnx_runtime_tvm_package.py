@@ -2,12 +2,11 @@
 import os
 import tarfile
 import tempfile
-import pytest
 
 import numpy as np
 import onnx
 import onnxruntime
-from onnx import TensorProto
+import pytest
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
     make_graph,
@@ -17,8 +16,9 @@ from onnx.helper import (
     make_tensor_value_info,
 )
 from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
+
 from tvm2onnx.onnx_model import ONNXModel
-from tvm2onnx.utils import print_path_contents
+
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 
 
@@ -77,7 +77,7 @@ def test_onnx_package(dtype_str):
 def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     """Returns an ONNX model with external constants."""
     dtype = np.dtype(dtype_str)
-    a = make_tensor_value_info(f"a", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
+    a = make_tensor_value_info("a", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
 
     if uniform:
         c1_data = np.full(shape=input_shape, fill_value=3, dtype=dtype)
@@ -87,16 +87,16 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
         c2_data = np.random.randn(*input_shape).astype(dtype)
 
     initializers = []
-    c1 =make_tensor(
-        name=f"c1",
+    c1 = make_tensor(
+        name="c1",
         data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
         dims=c1_data.shape,
         vals=c1_data.flatten().tobytes(),
         raw=True,
     )
 
-    c2 =make_tensor(
-        name=f"c2",
+    c2 = make_tensor(
+        name="c2",
         data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
         dims=c2_data.shape,
         vals=c2_data.flatten().tobytes(),
@@ -104,13 +104,19 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     )
     initializers = [c1, c2]
 
-    add = make_node("Add", [f"a", f"c1"], ["add"])
-    mul = make_node("Mul", ["add", f"c2"], ["result"])
+    add = make_node("Add", ["a", "c1"], ["add"])
+    mul = make_node("Mul", ["add", "c2"], ["result"])
 
-    result = make_tensor_value_info("result", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
+    result = make_tensor_value_info(
+        "result", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape
+    )
 
     graph = make_graph(
-        nodes=[add, mul], name="ab_model", inputs=[a], outputs=[result], initializer=initializers
+        nodes=[add, mul],
+        name="ab_model",
+        inputs=[a],
+        outputs=[result],
+        initializer=initializers,
     )
 
     onnx_proto = make_model(graph)

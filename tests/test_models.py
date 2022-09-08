@@ -1,11 +1,12 @@
 import os
-import tempfile
+import pathlib
 import tarfile
-import structlog
+import tempfile
+
 import numpy as np
 import onnxruntime
 import pytest
-import pathlib
+import structlog
 
 from tvm2onnx.onnx_model import ONNXModel
 from tvm2onnx.utils import get_path_contents
@@ -15,10 +16,12 @@ import os
 
 LOG = structlog.get_logger(__name__)
 
+
 def gather_models():
     for model_name in get_path_contents(_MODELS_DIR):
         if pathlib.Path(model_name).suffix == ".onnx":
             yield model_name
+
 
 @pytest.mark.slow
 @pytest.mark.parametrize("model_name", gather_models())
@@ -65,7 +68,7 @@ def test_models_in_models_dir(model_name):
                 sess_options=sess_options,
             )
 
-            output_data = engine.run(output_names=None, input_feed=input_data)
+            engine.run(output_names=None, input_feed=input_data)
     except Exception as e:
         assert False
         LOG.exception(e)
