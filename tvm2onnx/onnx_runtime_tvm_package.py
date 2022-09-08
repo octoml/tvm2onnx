@@ -302,17 +302,16 @@ class ONNXRuntimeTVMPackage:
         constants = self._build_vm(model=model, out_dir=build_dir)
 
         for name, data in constants.items():
-            constant_name = name
             tvm_constant_names.append(name)
             np_data = data.numpy()
             constant_tensor = make_tensor(
-                name=constant_name,
+                name=name,
                 data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np_data.dtype],
                 dims=np_data.shape,
                 vals=np_data.flatten().tobytes(),
                 raw=True,
             )
-            custom_op_input_names.append(constant_name)
+            custom_op_input_names.append(name)
             initializers.append(constant_tensor)
 
         cc_config = self.cookiecutter_config(
