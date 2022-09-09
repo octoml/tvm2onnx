@@ -364,7 +364,7 @@ class ONNXRuntimeTVMPackage:
             custom_op_input_names,
             output_names,
             domain=domain,
-            name="fred",
+            name=self._model_name,
         )
         graph_nodes.append(custom_op)
 
@@ -396,11 +396,6 @@ class ONNXRuntimeTVMPackage:
                 all_tensors_to_one_file=False,
                 size_threshold=1024,
             )
-            # context = onnx.checker.DEFAULT_CONTEXT
-            # DOMAIN = "octoml.ai"
-            # VERSION = 1 # try 2 or 3, I had some issues with the versioning
-            # new_opset = onnx.helper.make_opsetid(DOMAIN, VERSION)
-            # onnx.checker.check_model(onnx_model_file)
             with tarfile.open(onnx_archive, "w") as onnx_tar:
                 for file in get_path_contents(onnx_save_dir):
                     onnx_tar.add(os.path.join(onnx_save_dir, file), file)

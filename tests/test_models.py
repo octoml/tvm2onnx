@@ -7,7 +7,6 @@ import numpy as np
 import onnxruntime
 import pytest
 import structlog
-import onnx
 
 from tvm2onnx.onnx_model import ONNXModel
 from tvm2onnx.utils import get_path_contents
@@ -47,14 +46,11 @@ def test_models_in_models_dir(model_name):
             output_path=onnx_path,
         )
         model_dir = os.path.join(tdir, "model")
-        import shutil
-        shutil.copy(onnx_path, "model.tar.onnx")
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
         onnx_model_path = os.path.join(model_dir, "test_model.onnx")
         custom_lib = os.path.join(model_dir, "custom_test_model.so")
 
-        shutil.copy(onnx_path, "tvm.onnx")
         onnx_model = ONNXModel.from_file(onnx_model_path)
         onnx_model.infer_and_update_inputs()
         input_data = {}
