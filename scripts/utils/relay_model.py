@@ -126,6 +126,6 @@ class RelayModel:
             output_list = [ret_type]
 
         return {
-            f"output_{i}": TensorShape(tensor.dtype, list(tensor.shape))
+            f"output_{i}": TensorShape(tensor.dtype, [int(x) for x in tensor.shape])
             for i, tensor in enumerate(output_list)
         }

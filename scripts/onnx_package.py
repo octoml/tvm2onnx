@@ -20,7 +20,9 @@ def package(
 ):
     relay_model = RelayModel.from_onnx(onnx.load(model_path))
     relay_model.package_to_onnx(
-        "mnist", tvm_target="llvm", output_path=pathlib.Path(output_path)
+        pathlib.Path(model_path).stem,
+        tvm_target="llvm",
+        output_path=pathlib.Path(output_path),
     )
 
 

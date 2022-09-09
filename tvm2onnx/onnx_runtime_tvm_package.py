@@ -3,6 +3,7 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import tarfile
 import typing
@@ -144,55 +145,66 @@ class ONNXRuntimeTVMPackage:
         :return: config to apply via cookiecutter for the ONNX custom-op template.
         """
 
-        def _emit_element(index, name, shape, dtype) -> typing.Dict[str, typing.Any]:
-            onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
+        def _emit_element(
+            index, name, tensor_shape: shapes.TensorShape
+        ) -> typing.Dict[str, typing.Any]:
+            onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[
+                np.dtype(tensor_shape.dtype)
+            ]
             element_count = 1
-            for dim in shape:
+            for dim in tensor_shape.shape:
                 element_count *= dim
             idict: typing.Dict[str, typing.Any] = {
                 "name": name,
-                "shape": f"{{{', '.join(map(str, shape))}}}",
-                "rank": len(shape),
+                "shape": f"{{{', '.join(map(str, tensor_shape.shape))}}}",
+                "rank": len(tensor_shape.shape),
                 "element_count": element_count,
-                "numpy_dtype": dtype,
+                "numpy_dtype": tensor_shape.dtype,
                 "index": index,
-                "cpp_type": NUMPY_TO_CPP_TYPES.get(dtype),
+                "cpp_type": NUMPY_TO_CPP_TYPES.get(tensor_shape.dtype),
                 "onnx_type": ONNXTensorElementDataType[onnx_type],
             }
             return idict
 
-        inputs = []
-        initializers = []
+        def _emit_initializer(
+            index: int, initializer: onnx.TensorProto, tvm_constant_name: str
+        ) -> typing.Dict[str, typing.Any]:
+            tensor_shape = shapes.TensorShape(
+                dtype=str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type]),
+                shape=initializer.dims,
+            )
+            idict = _emit_element(
+                index,
+                initializer.name,
+                tensor_shape,
+            )
+            idict["base_name"] = tvm_constant_name
+            return idict
 
         # Inputs for the custom op are ordered:
         #    Constants
         #    Inputs
         # All constants are first with the inputs following.
-        index = 0
-        for initializer, base_name in zip(initializer_tensors, tvm_constant_names):
-            var_name = initializer.name
-            dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
-            idict = _emit_element(index, var_name, initializer.dims, dtype)
-            idict["base_name"] = base_name
-            initializers.append(idict)
-            index += 1
-
-        for tensor_shape in self._inputs.values():
-            var_name = f"input_{index}"
-            idict = _emit_element(
-                index, var_name, tensor_shape.shape, tensor_shape.dtype
+        initializers = [
+            _emit_initializer(i, initializer, tvm_name)
+            for (i, (initializer, tvm_name)) in enumerate(
+                zip(initializer_tensors, tvm_constant_names)
             )
-            inputs.append(idict)
-            index += 1
+        ]
 
-        outputs = []
-        for tensor_shape in self._outputs.values():
-            var_name = f"output_{index}"
-            idict = _emit_element(
-                index, var_name, tensor_shape.shape, tensor_shape.dtype
+        inputs = [
+            _emit_element(
+                len(initializers) + i,
+                f"input_{i}",
+                tensor_shape,
             )
-            outputs.append(idict)
-            index += 1
+            for i, tensor_shape in enumerate(self._inputs.values())
+        ]
+
+        outputs = [
+            _emit_element(i, f"output_{i}", tensor_shape)
+            for i, tensor_shape in enumerate(self._outputs.values())
+        ]
 
         input_types = []
         input_shapes = []
@@ -204,7 +216,7 @@ class ONNXRuntimeTVMPackage:
             shape_str = f"{{{', '.join(map(str, tensor_shape.shape))}}}"
             input_shapes.append(shape_str)
 
-        for index, initializer in enumerate(initializer_tensors):
+        for initializer in initializer_tensors:
             input_types.append(ONNXTensorElementDataType[initializer.data_type])
             shape_str = f"{{{', '.join(map(str, initializer.dims))}}}"
             input_shapes.append(shape_str)
@@ -225,8 +237,6 @@ class ONNXRuntimeTVMPackage:
             "op_name": "custom_op_library_source",
             "module_name": self._model_name,
             "custom_op_name": self.custom_op_name,
-            "model_so": str(self._model_so),
-            "model_ro": str(self._model_ro),
             "dl_device_type": self._dl_device_type,
             "input_count": str(len(inputs)),
             "output_count": str(len(outputs)),
@@ -287,6 +297,8 @@ class ONNXRuntimeTVMPackage:
         )
 
         source_dir = build_dir / cc_config["op_name"]
+        shutil.copy(self._model_so, source_dir / "model.so")
+        shutil.copy(self._model_ro, source_dir / "vm_exec_code.ro")
         custom_op_name = f"custom_{self._model_name}.so"
         with open(source_dir / "custom_op_library.cc", "r") as f:
             LOG.debug(f"custom op library generated: {f.read()}")
@@ -339,28 +351,23 @@ class ONNXRuntimeTVMPackage:
         onnx_proto = make_model(graph)
         # TODO: rkimball Can't check because of the custom op.
         # onnx.checker.check_model(onnx_proto)
-        convert_model_to_external_data(
-            onnx_proto,
-            all_tensors_to_one_file=False,
-            size_threshold=1024,
-            convert_attribute=True,
-        )
         # onnx_save_dir is the directory where the .onnx model file along with any
         # external constants files are written. There may be multiple files here
         # with unknown names but they all belong in the output file.
         with TemporaryDirectory() as onnx_save_dir:
             onnx_model_file = pathlib.Path(onnx_save_dir) / f"{self._model_name}.onnx"
             onnx_archive = build_dir / f"{self._model_name}.onnx.tar"
-            onnx.save(
+            onnx.save_model(
                 proto=onnx_proto,
-                f=onnx_model_file,
+                f=str(onnx_model_file),
                 save_as_external_data=True,
                 all_tensors_to_one_file=False,
                 size_threshold=1024,
+                convert_attribute=True,
             )
             with tarfile.open(onnx_archive, "w") as onnx_tar:
                 for file in get_path_contents(onnx_save_dir):
                     onnx_tar.add(os.path.join(onnx_save_dir, file), file)
-                onnx_tar.add(os.path.join(build_dir, custom_op_name), custom_op_name)
+                onnx_tar.add(source_dir / custom_op_name, custom_op_name)
 
             return onnx_archive
