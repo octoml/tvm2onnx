@@ -58,7 +58,7 @@ class RelayModel:
         """Imports an ONNX model into Relay.
 
         :param onnx_model: the in-memory ONNX model
-        :param dynamic_axis_subsitution: the value to use to represent dynamic axes in shapes
+        :param dynamic_axis_substitute: the value to use to represent dynamic axes in shapes
         :param input_shapes: optional input shapes to use
         :param input_dtypes: optional input dtypes to use
         :return: a RelayModel
