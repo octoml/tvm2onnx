@@ -7,6 +7,8 @@ import argparse
 import logging
 import pathlib
 
+import onnx
+
 from scripts.utils import setup_logging
 from tvm2onnx.relay_model import RelayModel
 
@@ -17,7 +19,7 @@ def package(
     model_path: str,
     output_path: str,
 ):
-    relay_model = RelayModel.from_onnx(model_path)
+    relay_model = RelayModel.from_onnx(onnx.load(model_path))
     relay_model.package_to_onnx(
         "mnist", tvm_target="llvm", output_path=pathlib.Path(output_path)
     )
