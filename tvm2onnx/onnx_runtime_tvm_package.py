@@ -202,22 +202,22 @@ class ONNXRuntimeTVMPackage:
         #    Inputs
         #    Constants
         # All constants are first with the inputs following.
-        input_count = 0
+        index = 0
         for name in model.input_shapes.keys():
             shape = model.input_shapes[name]
             dtype = model.input_dtypes[name]
-            var_name = f"input_{input_count}"
-            idict = _emit_element(input_count, var_name, shape, dtype)
+            var_name = f"input_{index}"
+            idict = _emit_element(index, var_name, shape, dtype)
             inputs.append(idict)
-            input_count += 1
+            index += 1
 
         for initializer, base_name in zip(initializer_tensors, tvm_constant_names):
             var_name = initializer.name
             dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
-            idict = _emit_element(input_count, var_name, initializer.dims, dtype)
+            idict = _emit_element(index, var_name, initializer.dims, dtype)
             idict["base_name"] = base_name
             initializers.append(idict)
-            input_count += 1
+            index += 1
 
         outputs = []
         for index, out_info in enumerate(model.get_outputs()):
