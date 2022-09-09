@@ -5,8 +5,12 @@ description = "Tune and convert TVM models to ONNX"
 authors = ["Robert Kimball <bobkimball@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.11"
+python = ">=3.7,<3.11"
+onnx = "1.12.0"
+cookiecutter = "^1.7.2"
 
+
+[tool.poetry.dev-dependencies]
 # TVM Dependencies
 numpy = "1.21.6"
 psutil = "5.7.2"
@@ -23,15 +27,12 @@ requests = "2.27.1"
 Pillow = "^8.4.0"
 Cython = "0.29.23"
 synr = "0.6.0"
-scipy = {version = "1.4.1", markers="platform_machine == 'x86_64' or platform_machine == 'arm64'"}
+scipy = "^1.4.1"
 
-# tvm2onnx Dependencies
-structlog = "^21.2.0"
-onnx = "1.12.0"
-onnxruntime-gpu = "1.12.1"
-cookiecutter = "^1.7.2"
+# Scripts
+onnxruntime = "1.12.1"
 
-# dev dependencies
+# Test/Lint
 pytest = "^6.1.2"
 pytest-cov = "^3.0.0"
 pytest-mock = "^3.1.0"
@@ -42,7 +43,7 @@ pytest-xdist = "^2.4.0"
 pytest-virtualenv = "^1.7.0"
 black = "22.3.0"
 isort = "^5.8.0"
-mypy = "^0.790"
+mypy = "^0.971"
 flake8 = "^3.9.2"
 ffi-navigator = "^0.5.2"
 typing-extensions = "*"

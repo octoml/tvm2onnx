@@ -87,15 +87,14 @@ def _do_benchmark(
 
 
 def main():  # pragma: no cover
-    parser = argparse.ArgumentParser(description="Package model to a TVM onnx file.")
+    parser = argparse.ArgumentParser(description="Benchmark an ONNX model")
     parser.add_argument(
         "--model",
         required=True,
-        help="Path to the Model to tune (in ONNX format).",
+        help="Path to the ONNX model tarball to benchmark",
     )
     args = parser.parse_args()
 
-    # setup_logging()
     _do_benchmark(
         model_path=args.model,
     )

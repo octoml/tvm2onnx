@@ -7,30 +7,31 @@ import argparse
 import logging
 import pathlib
 
-from scripts.utils import setup_logging
-from tvm2onnx.onnx_model import ONNXModel
+import onnx
 
-logging.basicConfig(level=logging.DEBUG)
+from scripts.utils.relay_model import RelayModel
+
+logging.basicConfig(level=logging.CRITICAL)
 
 
 def package(
     model_path: str,
     output_path: str,
 ):
-    onnx_model = ONNXModel.from_file(pathlib.Path(model_path))
-    onnx_model.infer_and_update_inputs()
-    relay_model = onnx_model.to_relay()
+    relay_model = RelayModel.from_onnx(onnx.load(model_path))
     relay_model.package_to_onnx(
         "mnist", tvm_target="llvm", output_path=pathlib.Path(output_path)
     )
 
 
 def main():  # pragma: no cover
-    parser = argparse.ArgumentParser(description="Package a tuned TVM model to ONNX.")
+    parser = argparse.ArgumentParser(
+        description="Package an ONNX model as an untuned TVM ONNX."
+    )
     parser.add_argument(
         "--input",
         required=True,
-        help="Model TVM file.",
+        help="Model ONNX file.",
     )
     parser.add_argument(
         "--output",
@@ -39,7 +40,6 @@ def main():  # pragma: no cover
     )
     args = parser.parse_args()
 
-    setup_logging()
     package(model_path=args.input, output_path=args.output)
 
 

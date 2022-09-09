@@ -19,12 +19,6 @@
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/vm/vm.h>
 
-#ifdef USE_CUDA
-#include <cuda_runtime.h>
-template <typename T1, typename T2, typename T3>
-void cuda_add(int64_t, T3*, const T1*, const T2*, cudaStream_t compute_stream);
-#endif
-
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
 struct OrtCustomOpDomainDeleter {
