@@ -49,14 +49,14 @@ def test_models_in_models_dir(model_name):
             dtype = relay_model.input_dtypes[name]
             input_data[name] = np.random.randn(*shape).astype(np.dtype(dtype))
 
-    sess_options = onnxruntime.SessionOptions()
-    sess_options.register_custom_ops_library(custom_lib)
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.register_custom_ops_library(custom_lib)
 
-    session = onnxruntime.InferenceSession(
-        onnx_model_path,
-        providers=["CPUExecutionProvider"],
-        provider_options=[{}],
-        sess_options=sess_options,
-    )
+        session = onnxruntime.InferenceSession(
+            onnx_model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
+        )
 
-    session.run(output_names=None, input_feed=input_data)
+        session.run(output_names=None, input_feed=input_data)
