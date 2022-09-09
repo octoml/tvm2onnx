@@ -3,7 +3,10 @@ import os
 
 import pytest
 import tvm
+import logging
 
+logging.captureWarnings(True)
+print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
 
 def pytest_addoption(parser):
     parser.addoption(
