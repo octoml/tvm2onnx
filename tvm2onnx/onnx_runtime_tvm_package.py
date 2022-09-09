@@ -173,6 +173,8 @@ class ONNXRuntimeTVMPackage:
         def _emit_element(index, name, shape, dtype) -> typing.Dict[str, typing.Any]:
             onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
             element_count = 1
+            # shape can contain funky tvm types so convert everything to int
+            shape = list(map(int, shape))
             for dim in shape:
                 element_count *= dim
             idict: typing.Dict[str, typing.Any] = {
@@ -191,24 +193,24 @@ class ONNXRuntimeTVMPackage:
         initializers = []
 
         # Inputs for the custom op are ordered:
-        #    Constants
         #    Inputs
+        #    Constants
         # All constants are first with the inputs following.
         index = 0
-        for initializer, base_name in zip(initializer_tensors, tvm_constant_names):
-            var_name = initializer.name
-            dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
-            idict = _emit_element(index, var_name, initializer.dims, dtype)
-            idict["base_name"] = base_name
-            initializers.append(idict)
-            index += 1
-
         for name in model.input_shapes.keys():
             shape = model.input_shapes[name]
             dtype = model.input_dtypes[name]
             var_name = f"input_{index}"
             idict = _emit_element(index, var_name, shape, dtype)
             inputs.append(idict)
+            index += 1
+
+        for initializer, base_name in zip(initializer_tensors, tvm_constant_names):
+            var_name = initializer.name
+            dtype = str(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[initializer.data_type])
+            idict = _emit_element(index, var_name, initializer.dims, dtype)
+            idict["base_name"] = base_name
+            initializers.append(idict)
             index += 1
 
         outputs = []
@@ -293,7 +295,26 @@ class ONNXRuntimeTVMPackage:
         tvm_constant_names = []
         domain = "octoml.ai"
 
+        for name in model.input_dtypes.keys():
+            sanitized_name = self._sanitize_io_name(name)
+            shape = model.input_shapes[name]
+            dtype = model.input_dtypes[name]
+            tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
+            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
+            input_tensors.append(tensor)
+            custom_op_input_names.append(sanitized_name)
+
+        for output in model.get_outputs():
+            sanitized_name = self._sanitize_io_name(output.name)
+            tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
+                np.dtype(output.dtype)
+            ]
+            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
+            output_tensors.append(tensor)
+            output_names.append(sanitized_name)
+
         constants = model.compile(self._tvm_target, build_dir)
+
         for name, data in constants.items():
             tvm_constant_names.append(name)
             np_data = data.numpy()
@@ -327,29 +348,12 @@ class ONNXRuntimeTVMPackage:
             LOG.error("Error compiling custom op library:\n" + err)
             raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
 
-        for name in model.input_dtypes.keys():
-            sanitized_name = self._sanitize_io_name(name)
-            shape = model.input_shapes[name]
-            dtype = model.input_dtypes[name]
-            tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
-            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
-            input_tensors.append(tensor)
-            custom_op_input_names.append(sanitized_name)
-
-        for output in model.get_outputs():
-            sanitized_name = self._sanitize_io_name(output.name)
-            tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
-                np.dtype(output.dtype)
-            ]
-            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
-            output_tensors.append(tensor)
-            output_names.append(sanitized_name)
-
         custom_op = make_node(
             self.custom_op_name,
             custom_op_input_names,
             output_names,
             domain=domain,
+            name=self._model_name,
         )
         graph_nodes.append(custom_op)
 
@@ -362,8 +366,6 @@ class ONNXRuntimeTVMPackage:
         )
 
         onnx_proto = make_model(graph)
-        # TODO: rkimball Can't check because of the custom op.
-        # onnx.checker.check_model(onnx_proto)
         convert_model_to_external_data(
             onnx_proto,
             all_tensors_to_one_file=False,
