@@ -1,10 +1,6 @@
 import os
 import typing
 
-import structlog
-
-LOG = structlog.get_logger(__name__)
-
 
 def print_path_contents(dir_root):
     for path in get_path_contents(dir_root):

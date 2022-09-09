@@ -17,7 +17,7 @@ from onnx.helper import (
 )
 from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 
-from tvm2onnx.onnx_model import ONNXModel
+from tvm2onnx.relay_model import RelayModel
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 
@@ -32,9 +32,7 @@ _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 )
 def test_onnx_package(dtype_str):
     with tempfile.TemporaryDirectory() as tdir:
-        source_model = ONNXModel.from_file(_MODEL_PATH)
-        source_model.infer_and_update_inputs()
-        relay_model = source_model.to_relay()
+        relay_model = RelayModel.from_onnx(onnx.load(_MODEL_PATH))
         onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
         relay_model.package_to_onnx(
             name="test_model",
@@ -149,9 +147,7 @@ def test_constant_model(dtype_str):
         c1_data, c2_data = add_constant_onnx_model(
             model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
         )
-        onnx_model = ONNXModel.from_file(model_path)
-        onnx_model.infer_and_update_inputs()
-        relay_model = onnx_model.to_relay()
+        relay_model = RelayModel.from_onnx(onnx.load(model_path))
         onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
         relay_model.package_to_onnx(
             name=f"test_model_{dtype_str}",

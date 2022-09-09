@@ -4,36 +4,22 @@ from __future__ import annotations
 
 import copy
 import dataclasses
-import json
-import os
+import logging
 import pathlib
 import shutil
-import tarfile
 import tempfile
-import time
 import typing
-from typing import Optional
 
-import structlog
+import onnx
 import tvm
-from tvm import auto_scheduler, autotvm, relay, target
-from tvm.contrib import cc
+from tvm import relay
 from tvm.relay import vm
-from tvm.runtime import vm as vm_rt
 from tvm.tir.expr import Any
-from tvm.utils import roofline
 
-from tvm2onnx import relay_serializer
+from tvm2onnx import inputs
 from tvm2onnx.error import TVM2ONNXError
-from tvm2onnx.inputs import InputDtypes, InputShapes
-from tvm2onnx.model_base import ModelBase
-from tvm2onnx.tuning_records import (
-    RecordType,
-    TuningRecordsType,
-    infer_record_type,
-    read_tuning_records,
-    write_tuning_records,
-)
+
+LOG = logging.getLogger(__name__)
 
 
 class RelayTensorDetail(typing.NamedTuple):
@@ -48,228 +34,71 @@ class RelayTensorDetail(typing.NamedTuple):
     dtype: str
     """Tensor data type"""
 
-    def sanitized(self) -> RelayTensorDetail:
-        """Sanitizes the tensor detail"""
-        shape = []
-        for dim in self.shape:
-            # A dim will have dtype int64 if the original ONNX
-            # model has a `Shape` operator producing int64 dims.
-            # We cast to int32 to avoid producing an invalid model
-            # config for Triton where dims are strings like "1i64"
-            # rather than just "1".
-            new_dim = -1 if isinstance(dim, Any) else int(dim)
-            shape.append(new_dim)
-        detail = RelayTensorDetail(
-            self.name,
-            shape,
-            self.dtype,
-        )
-        return detail
-
-
-LOG = structlog.get_logger(__name__)
-
-_RELAY_OPT_LEVEL = 3
-
-# N.B. Modify the environment (!) before compiling or tuning to
-# ensure that TopHub logs are disabled.
-os.environ[
-    autotvm.tophub.AUTOTVM_TOPHUB_LOC_VAR
-] = autotvm.tophub.AUTOTVM_TOPHUB_NONE_LOC
-
-
-class RelayTuningRecordTypeError(TVM2ONNXError):
-    """Indicates that there is an issue with the record type"""
-
-
-class ExtractedTask(typing.NamedTuple):
-    """A tuning task extracted from the high-level IR via MetaSchedule."""
-
-    task_name: str
-    """The name of the task extracted."""
-
-    mod: tvm.ir.IRModule
-    """The high-level IR."""
-
-    dispatched: typing.List[tvm.ir.IRModule]
-    """A list of low-level IRs that the high-level IR could dispatch to."""
-
 
 @dataclasses.dataclass
-class RelayModel(ModelBase):
+class RelayModel:
     """Represents a Model in Relay format."""
 
     model: tvm.ir.IRModule
-
-    def __init__(
-        self,
-        *args,
-        params: relay_serializer.ModelParams,
-        best_records: TuningRecordsType = None,
-        output_names: typing.List[str] = None,
-        **kwargs,
-    ):
-        """Initializes a new RelayModel.
-
-        :param params: the parameters of this model.
-        :param best_records: the best tuning records available for this model.
-        :param output_names: Since TVM does not have named outputs we can use
-            output_names to set a list of names for the output tensors. These
-            names are applied to the outputs when the get_outputs() method
-            is called. This is added to allow Triton config files outputs to
-            have appropriate names. output_names is intended to be set by
-            framework `to_relay` functions, such as when converting an onnx
-            model to relay. This propagates the onnx model output names through
-            relay.
-        """
-        super().__init__(*args, **kwargs)
-        self.params = params
-        self.best_records: TuningRecordsType = best_records or []
-        self.output_names = output_names
+    params: typing.Dict[str, tvm.nd.NDArray]
+    input_shapes: inputs.InputShapes
+    input_dtypes: inputs.InputDtypes
+    output_names: typing.List[str]
 
     @classmethod
-    def from_file(
-        # Must fuse module and params into one file.
+    def from_onnx(
         cls,
-        module_and_params: pathlib.Path,
-        input_shapes: InputShapes,
-        input_dtypes: InputDtypes,
-        best_records_path: Optional[pathlib.Path] = None,
+        onnx_model: onnx.ModelProto,
+        input_shapes: typing.Optional[inputs.InputShapes] = None,
+        input_dtypes: typing.Optional[inputs.InputDtypes] = None,
     ) -> RelayModel:
-        LOG.info(
-            "Create RelayModel from file",
-            module_and_params=module_and_params,
-            input_shapes=input_shapes,
-            input_dtypes=input_dtypes,
-            best_records_path=best_records_path,
-        )
-        with open(module_and_params, "rb") as f:
-            model_bytes = f.read()
-        module, params = relay_serializer.RelaySerializer.deserialize(model_bytes)
+        if not input_shapes or not input_dtypes:
+            # Infer from the ONNX model
+            input_shapes = {}
+            input_dtypes = {}
+            initializer_names = [n.name for n in onnx_model.graph.initializer]
+            # The inputs contains both the inputs and parameters. We are just interested in the
+            # inputs so skip all parameters listed in graph.initializer
+            for input_info in onnx_model.graph.input:
+                if input_info.name not in initializer_names:
+                    _, shape, dtype, _ = relay.frontend.onnx.get_info(input_info)
+                    if dtype is None:
+                        raise TVM2ONNXError(
+                            f"Unknown dtype on input '{input_info.name}' is not supported.",
+                            {"inputs": str(input_info.name)},
+                        )
 
-        best_records: TuningRecordsType = (
-            read_tuning_records(best_records_path) if best_records_path else []
+                    # Normalize the shape dimensions to integers
+                    input_shapes[input_info.name] = [
+                        int(s) if not isinstance(s, Any) else -1 for s in shape
+                    ]
+                    input_dtypes[input_info.name] = dtype
+
+        mod, params = relay.frontend.from_onnx(
+            onnx_model,
+            shape=input_shapes,
+            freeze_params=True,
         )
 
         return cls(
-            model=module,
-            input_shapes=input_shapes,
-            input_dtypes=input_dtypes,
-            params=params,
-            best_records=best_records,
+            mod,
+            params,
+            input_shapes,
+            input_dtypes,
+            [tensor.name for tensor in onnx_model.graph.output],
         )
-
-    def to_file(
-        self,
-        module_and_params_filename: str,
-        best_records_filename: Optional[pathlib.Path] = None,
-    ):
-        LOG.info(
-            "Write RelayModel to file",
-            module_and_params_filename=module_and_params_filename,
-            best_records_filename=best_records_filename,
-        )
-        model_bytes = relay_serializer.RelaySerializer.serialize(
-            (self.model, self.params)
-        )
-        with open(module_and_params_filename, "wb") as f:
-            f.write(model_bytes)
-        if best_records_filename:
-            write_tuning_records(best_records_filename, self.best_records)
-
-    def to_bytes(
-        self,
-    ) -> bytes:
-        return relay_serializer.RelaySerializer.serialize((self.model, self.params))
-
-    @staticmethod
-    def create_tvm_filename(path: str) -> str:
-        model_name = os.path.split(path)[-1]
-        ext_list = [
-            ".tar.gz",
-            ".tgz",
-            ".pb",
-            "tar",
-        ]
-        for ext in ext_list:
-            if model_name.endswith(ext):
-                model_name = model_name[1 : -len(ext)]
-        return model_name + ".tvm"
-
-    def to_tvm_file(
-        self,
-        path: str,
-        best_records: typing.IO[bytes] = None,
-        full_records: typing.IO[bytes] = None,
-    ):
-        with tarfile.open(path, "w") as model_tar:
-            model_bytes = relay_serializer.RelaySerializer.serialize(
-                (self.model, self.params)
-            )
-            with tempfile.NamedTemporaryFile("wb") as f:
-                f.write(model_bytes)
-                f.flush()
-                model_tar.add(f.name, "model.bin")
-            if best_records:
-                model_tar.add(best_records.name, "best_records.log")
-            elif self.best_records:
-                with tempfile.NamedTemporaryFile("wb") as f:
-                    write_tuning_records(pathlib.Path(f.name), self.best_records)
-                    f.flush()
-                    model_tar.add(f.name, "best_records.log")
-            if full_records:
-                model_tar.add(full_records.name, "full_records.log")
-            output_shapes = {}
-            output_dtypes = {}
-            for obj in self.get_outputs():
-                obj = obj.sanitized()
-                output_shapes[obj.name] = obj.shape
-                output_dtypes[obj.name] = obj.dtype
-            metadata = {
-                "input_shapes": self.input_shapes,
-                "input_dtypes": self.input_dtypes,
-                "output_shapes": output_shapes,
-                "output_dtypes": output_dtypes,
-            }
-            with tempfile.NamedTemporaryFile("w") as tmpf:
-                json.dump(metadata, tmpf)
-                tmpf.flush()
-                model_tar.add(tmpf.name, "metadata.json")
-
-    @staticmethod
-    def from_tvm_file(path: str) -> RelayModel:
-        with tarfile.open(path, "r") as model_tar:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                model_tar.extractall(tmpdir)
-                with open(os.path.join(tmpdir, "metadata.json")) as json_file:
-                    metadata = json.load(json_file)
-                relay_model = RelayModel.from_file(
-                    module_and_params=pathlib.Path(os.path.join(tmpdir, "model.bin")),
-                    input_shapes=metadata["input_shapes"],
-                    input_dtypes=metadata["input_dtypes"],
-                    best_records_path=pathlib.Path(
-                        os.path.join(tmpdir, "best_records.log")
-                    ),
-                )
-                relay_model.output_names = metadata["output_shapes"].keys()
-                return relay_model
 
     def package_to_onnx(
         self,
         name: str,
         tvm_target: str,
         output_path: pathlib.Path,
-        relay_opt_level=_RELAY_OPT_LEVEL,
-        host_target: typing.Optional[str] = None,
     ):
         """Builds the ONNX file and returns the path to the package.
 
         :param name: ONNX model name
         :param tvm_target: TVM target for model compile.
         :param output_path: path to the target output file.
-        :param relay_opt_level: the Relay optimization level to compile the model with.
-        :param host_target: Set the target.host so tvm can export cross compiled shared objects for
-            non-cpu based targets.
         """
         from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
 
@@ -277,120 +106,32 @@ class RelayModel(ModelBase):
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
                 tvm_target=tvm_target,
-                relay_opt_level=relay_opt_level,
                 build_dir=pathlib.Path(tdir),
-                tvm_host_target=host_target,
             )
             onnx_tar = packager.build(model=self)
             shutil.move(str(onnx_tar), str(output_path))
 
-    def infer_inputs(
-        self,
-    ) -> typing.Tuple[InputShapes, InputDtypes]:
-        """
-        Returns input shapes and input dtype specified as model attributes.
-        Relay models must have input shapes and input dtypes specified when constructed.
-
-        :return: input shapes and input dtypes of this Relay Model.
-        """
-        return self.input_shapes, self.input_dtypes
-
-    def infer_and_update_inputs(self):
-        """
-        No need to overwrites existing input info on Relay Model,
-        Relay models must have input shapes and input dtypes specified when constructed.
-        """
-        pass
-
-    @staticmethod
-    def static_inputs(mod: tvm.ir.IRModule) -> bool:
-        """Check to see if the arguments to an IRModule are statically shaped
-
-        :param mod: The IRModule to check
-        :return: True or False, the inputs to the module are static
-        """
-        # Check the model inputs to see if inputs are dynamic
-        mod = relay.transform.InferType()(mod)
-        for var in mod["main"].params:
-            if "?" in str(var.checked_type.shape):
-                return False
-        return True
-
-    @staticmethod
-    def shared_object_build_func(host_target: str):
-        """Gets a TVM build function for creating a shared object
-
-        :param host_target: the TVM target host
-        :return: a function to be passed to `export_library`
-        """
-        if "aarch64-linux-gnu" in host_target:
-            return cc.cross_compiler("aarch64-linux-gnu-gcc")
-        elif "armv8l-linux-gnueabihf" in host_target:
-            return cc.cross_compiler("arm-linux-gnueabihf-gcc")
-        else:
-            # The above are the only cross-compile targets we currently support.
-            return cc.create_shared
-
-    def _create_vm_exe(
-        self,
-        tvm_target: typing.Union[str, target.Target],
-        tvm_target_host: typing.Optional[str],
-        opt_level: int,
-    ) -> typing.Tuple[
-        vm_rt.Executable, typing.Dict[tvm.ir.GlobalVar, tvm.tir.PrimFunc], float
-    ]:
-        """Compiles a model into a Relay VM Executable
-
-        :param tvm_target: the TVM target for which to compile the model
-        :param tvm_target_host: the TVM target host for which to compile the model
-        :param opt_level: the Relay optimization level
-        :return: a tuple containing a RelayVM Executable, the lowered TIR
-                 functions, and the compile duration in seconds
-        """
-        start_compile = time.perf_counter()
-
-        tvm_target_, tvm_host_target_ = target.Target.canon_target_and_host(
-            tvm_target, tvm_target_host
+    def compile(self, tvm_target: str, build_directory: pathlib.Path) -> typing.Any:
+        vm_exec = vm.compile(
+            copy.deepcopy(self.model),
+            tvm_target,
+            params=self.params,
         )
 
-        saved_tir = roofline.SaveLoweredTIR()
+        constants_map = vm_exec.get_late_bound_consts(1024)
 
-        record_type = infer_record_type(self.best_records)
-        if record_type == RecordType.AUTOTVM:
-            with autotvm.apply_history_best(self.best_records):
-                with tvm.transform.PassContext(
-                    opt_level=opt_level,
-                    config={"relay.FuseOps.max_depth": 30},
-                    instruments=[saved_tir],
-                ):
-                    exe = vm.compile(
-                        copy.deepcopy(self.model),
-                        tvm_target_,
-                        params=self.params,
-                        target_host=tvm_host_target_,
-                    )
-        elif record_type == RecordType.AUTOSCHEDULE:
-            with auto_scheduler.ApplyHistoryBest(self.best_records):
-                with tvm.transform.PassContext(
-                    opt_level=opt_level,
-                    config={
-                        "relay.backend.use_auto_scheduler": True,
-                        "relay.FuseOps.max_depth": 30,
-                    },
-                    instruments=[saved_tir],
-                ):
-                    exe = vm.compile(
-                        copy.deepcopy(self.model),
-                        tvm_target_,
-                        params=self.params,
-                        target_host=tvm_host_target_,
-                    )
-        else:
-            raise RelayTuningRecordTypeError(f"Unknown RecordType: {record_type}")
+        # Save vm exec code bytes.
+        ro_path = build_directory / "vm_exec_code.ro"
+        vm_exec_code, mod = vm_exec.save()
+        with open(ro_path, "wb") as fo:
+            fo.write(vm_exec_code)
 
-        end_compile = time.perf_counter()
-        compile_s = end_compile - start_compile
-        return exe, saved_tir.functions, compile_s
+        so_path = build_directory / "model.so"
+
+        # Save module.
+        mod.export_library(str(so_path))
+
+        return constants_map
 
     def get_outputs(self) -> typing.List[RelayTensorDetail]:
         """Utility function to infer the IRModule outputs.
@@ -412,41 +153,3 @@ class RelayModel(ModelBase):
             shape = [dim for dim in tensor.shape]
             result.append(RelayTensorDetail(name=name, shape=shape, dtype=tensor.dtype))
         return result
-
-    @staticmethod
-    def apply_relay_passes(
-        mod: tvm.IRModule,
-    ):
-        """Applies relay passes to the input IRModule.
-
-        :param mod: The input IRModule
-        :return: The IRModule after all the relays passes have been applied
-        """
-        # N.B. Defer the import so as not to unconditionally require other runtimes.
-        from tvm import relay, transform
-
-        from tvm2onnx import relay_model
-
-        passes = []
-
-        # If the inputs are static, run DynamicToStatic to remove
-        # any residual dynamism in the model.
-        # If the inputs are dynamic, this pass is much more expensive
-        # and will not remove dynamism from the model, so we skip it.
-        if relay_model.RelayModel.static_inputs(mod):
-            passes.append(relay.transform.DynamicToStatic())
-
-        # Infer types prior to the quantization pass below as some
-        # transforms might need them.
-        passes.append(relay.transform.InferType())
-
-        # Transform fake quantized sub-graphs to actual integer ops.
-        # Should have no effect on graphs without the relevant patterns.
-        passes.append(relay.transform.FakeQuantizationToInteger())
-
-        # Fold constants after FQ2I becuase some weights are stored in FP32.
-        passes.append(relay.transform.FoldConstant())
-
-        # Use sequential to solve for dependent passes
-        seq = transform.Sequential(passes)
-        return seq(mod)
