@@ -324,7 +324,6 @@ class ONNXRuntimeTVMPackage:
         for name, data in constants.items():
             tvm_constant_names.append(name)
             np_data = data.numpy()
-            print(f"{name} nptype={np_data.dtype}, shape={np_data.shape}")
             constant_tensor = make_tensor(
                 name=name,
                 data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np_data.dtype],
