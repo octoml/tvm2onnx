@@ -166,7 +166,7 @@ shell.nix
 .direnv
 
 3rdparty/*
-models/*
-!models/README.md
+tests/models/*
+!tests/models/README.md
 *.tvm
 *.onnx

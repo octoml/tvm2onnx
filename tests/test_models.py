@@ -11,7 +11,7 @@ import structlog
 from tvm2onnx.onnx_model import ONNXModel
 from tvm2onnx.utils import get_path_contents
 
-_MODELS_DIR = os.path.join(os.path.dirname(__file__), "../models")
+_MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 import os
 
 LOG = structlog.get_logger(__name__)
@@ -29,7 +29,6 @@ def gather_models():
 def test_models_in_models_dir(model_name):
     """So far this test is just to see if models fail to either load or run"""
     model_path = os.path.abspath(os.path.join(_MODELS_DIR, model_name))
-    print(model_path)
     source_model = ONNXModel.from_file(model_path)
     source_model.infer_and_update_inputs()
     for name, shape in source_model.input_shapes.items():
