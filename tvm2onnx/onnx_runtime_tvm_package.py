@@ -1,4 +1,5 @@
 """ONNX package job."""
+import logging
 import os
 import pathlib
 import re
@@ -9,9 +10,9 @@ import typing
 import uuid
 from tempfile import TemporaryDirectory
 
+import cookiecutter.generate
 import numpy as np
 import onnx
-import structlog
 import tvm
 from onnx import numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
@@ -24,11 +25,11 @@ from onnx.helper import (
     make_tensor_value_info,
 )
 
-from tvm2onnx import package_utils, relay_model
+from tvm2onnx import relay_model
 from tvm2onnx.error import PackagingError
 from tvm2onnx.utils import get_path_contents
 
-LOG = structlog.get_logger(__name__)
+LOG = logging.getLogger(__name__)
 
 _CPP_TEMPLATE_PATH = "/usr/tvm2onnx/tvm2onnx/templates/onnx_custom_op"
 
@@ -101,27 +102,20 @@ class ONNXRuntimeTVMPackage:
         self,
         model_name: str,
         tvm_target: str,
-        relay_opt_level: int,
         build_dir: pathlib.Path,
-        tvm_host_target: typing.Optional[str] = None,
     ):
         """Initializes a new package.
 
         :param model_name: the package name
         :param tvm_target: the target platform
-        :param relay_opt_level: the optimization level
         :param build_dir: the path to the build directory
-        :param host_target: Set the target.host so tvm can export cross compiled shared objects for
-            non-cpu based targets.
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_target = tvm_target
-        self._tvm_host_target = tvm_host_target
-        self._relay_opt_level = relay_opt_level
         self._build_dir = pathlib.Path(build_dir)
 
         self._tvm_dir = pathlib.Path(os.path.dirname(tvm.__file__)).parent.parent
-        build_folder = self._get_build_folder(self._tvm_target, self._tvm_host_target)
+        build_folder = self._get_build_folder(self._tvm_target, None)
 
         self._tvm_build_dir = self._tvm_dir / build_folder
 
@@ -299,8 +293,7 @@ class ONNXRuntimeTVMPackage:
         tvm_constant_names = []
         domain = "octoml.ai"
 
-        constants = self._build_vm(model=model, out_dir=build_dir)
-
+        constants = model.compile(self._tvm_target, build_dir)
         for name, data in constants.items():
             tvm_constant_names.append(name)
             np_data = data.numpy()
@@ -326,16 +319,12 @@ class ONNXRuntimeTVMPackage:
         shutil.move(os.path.join(source, "Makefile"), target)
         make_dir = build_dir
         custom_op_name = f"custom_{self._model_name}.so"
-        shutil.copy(
-            os.path.join(build_dir, f"{self._model_name}.so"),
-            os.path.join(build_dir, "model.so"),
-        )
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:
-            LOG.debug("custom op library generated", code=f.read())
+            LOG.debug("custom op library generated: " + f.read())
         result = subprocess.run(["make"], capture_output=True, cwd=make_dir, text=True)
         if not result.returncode == 0:
             err = result.stderr
-            LOG.exception("Error compiling custom op library", output=err)
+            LOG.error("Error compiling custom op library:\n" + err)
             raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
 
         for name in model.input_dtypes.keys():
@@ -423,44 +412,6 @@ class ONNXRuntimeTVMPackage:
         build_template_dir = build_dir / os.path.basename(self.template_dir)
         shutil.copytree(self.template_dir, build_template_dir)
 
-        package_utils.cookiecut_package(build_template_dir, build_dir, config)
-
-    def _host_cpu_target(self):
-        return self._tvm_host_target or self._tvm_target
-
-    def _build_vm(
-        self,
-        model: relay_model.RelayModel,
-        out_dir: pathlib.Path,
-    ):
-        """Exports the relay model as `{module_name}.so` in dir `out_dir`.
-        Saves the Relay VM executable as `vm_exec_code.ro` in dir `out_dir`.
-
-        :param model: the relay model to export.
-        :param out_dir: path to the directory to put output in.
-        """
-        vm_exec, _, _ = model._create_vm_exe(
-            self._tvm_target,
-            self._tvm_host_target,
-            self._relay_opt_level,
+        cookiecutter.generate.generate_files(
+            build_template_dir, {"cookiecutter": config}, build_dir
         )
-
-        # This call replaces the call to move_late_bound_consts. We aren't saving the
-        # constants in TVM's format, we are saving them as part of the onnx model in
-        # onnx protobuf format.
-        constant_map = vm_exec.get_late_bound_consts(1024)
-
-        # Save vm exec code bytes.
-        vm_exec_code, mod = vm_exec.save()
-        with open(out_dir / "vm_exec_code.ro", "wb") as fo:
-            fo.write(vm_exec_code)
-
-        tvm_build_func = relay_model.RelayModel.shared_object_build_func(
-            self._host_cpu_target()
-        )
-        mod_path = str(out_dir / f"{self._model_name}.so")
-
-        # Save module.
-        mod.export_library(mod_path, fcompile=tvm_build_func)
-
-        return constant_map

@@ -2,7 +2,7 @@ import subprocess
 import tempfile
 
 
-def test_package_and_bencmark():
+def test_package_and_benchmark():
     with tempfile.NamedTemporaryFile() as tfile:
         model_path = tfile.name
         package_cmd = [
@@ -13,9 +13,9 @@ def test_package_and_bencmark():
             "--output",
             model_path,
         ]
-        result = subprocess.run(package_cmd, capture_output=True)
+        result = subprocess.run(package_cmd)
         assert result.returncode == 0
 
         benchmark_cmd = ["python", "scripts/onnx_benchmark.py", "--model", model_path]
-        result = subprocess.run(benchmark_cmd, capture_output=True)
+        result = subprocess.run(benchmark_cmd)
         assert result.returncode == 0
