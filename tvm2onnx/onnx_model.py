@@ -168,7 +168,9 @@ class ONNXModel(ModelBase):
                     basename = os.path.basename(member.name)
                     with open(os.path.join(tempdir, basename), "wb") as f:
                         f.write(file_bytes)
-            return onnx.load(os.path.join(tempdir, os.path.basename(onnx_file.name)))
+            model_path = os.path.join(tempdir, os.path.basename(onnx_file.name))
+            onnx.checker.check_model(model_path)
+            return onnx.load(model_path)
 
     def infer_inputs(
         self,
