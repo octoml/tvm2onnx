@@ -32,7 +32,9 @@ _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 )
 def test_onnx_package(dtype_str):
     with tempfile.TemporaryDirectory() as tdir:
-        relay_model = RelayModel.from_onnx(onnx.load(_MODEL_PATH))
+        relay_model = RelayModel.from_onnx(
+            onnx.load(_MODEL_PATH), dynamic_axis_substitute=1
+        )
         onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
         relay_model.package_to_onnx(
             name="test_model",
@@ -147,7 +149,9 @@ def test_constant_model(dtype_str):
         c1_data, c2_data = add_constant_onnx_model(
             model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
         )
-        relay_model = RelayModel.from_onnx(onnx.load(model_path))
+        relay_model = RelayModel.from_onnx(
+            onnx.load(model_path), dynamic_axis_substitute=1
+        )
         onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
         relay_model.package_to_onnx(
             name=f"test_model_{dtype_str}",

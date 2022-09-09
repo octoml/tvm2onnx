@@ -30,7 +30,7 @@ def gather_models():
 def test_models_in_models_dir(model_name):
     """So far this test is just to see if models fail to either load or run"""
     model_path = os.path.abspath(os.path.join(_MODELS_DIR, model_name))
-    relay_model = RelayModel.from_onnx(onnx.load(model_path))
+    relay_model = RelayModel.from_onnx(onnx.load(model_path), dynamic_axis_substitute=1)
     with tempfile.TemporaryDirectory() as tdir:
         onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
         relay_model.package_to_onnx(
