@@ -313,8 +313,14 @@ class ONNXRuntimeTVMPackage:
         shutil.move(os.path.join(source, "custom_op_library.cc"), target)
         shutil.move(os.path.join(source, "custom_op_library.h"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
-        shutil.copy(self._model_so, os.path.join(target, "model.so"))
-        shutil.copy(self._model_ro, os.path.join(target, "vm_exec_code.ro"))
+        try:
+            shutil.copy(self._model_so, os.path.join(target, "model.so"))
+        except shutil.SameFileError:
+            pass
+        try:
+            shutil.copy(self._model_ro, os.path.join(target, "vm_exec_code.ro"))
+        except shutil.SameFileError:
+            pass
         make_dir = build_dir
         custom_op_name = f"custom_{self._model_name}.so"
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:
