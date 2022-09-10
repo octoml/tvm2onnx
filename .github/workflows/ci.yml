@@ -23,7 +23,7 @@ jobs:
     - name: Build docker images and test
       run: |
         echo "Building test image"
-        DOCKER_BUILDKIT=0 docker build \
+        DOCKER_BUILDKIT=1 docker build \
         -t ghcr.io/octoml/tvm2onnx/ci:latest \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
         --cache-from ghcr.io/octoml/tvm2onnx/ci:latest \
