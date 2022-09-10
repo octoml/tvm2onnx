@@ -8,11 +8,9 @@ import onnx
 import onnxruntime
 import pytest
 import structlog
-import contextlib
 
 from tvm2onnx.relay_model import RelayModel
 from tvm2onnx.utils import get_path_contents
-from tvm import relay
 
 _MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 import os
@@ -21,18 +19,16 @@ LOG = structlog.get_logger(__name__)
 
 _MACOS_EXTENDED_ATTRIBUTE_FILE_PREFIX = "._"
 
-def _load_model_from_tar_file(model_tar_path: pathlib.Path) -> onnx.ModelProto:
+
+def load_model_from_tar_file(
+    model_tar_path: pathlib.Path, output_dir
+) -> onnx.ModelProto:
     """Extracts an onnx model from the given bytes if they represent a tarfile.
     :param model_bytes: the bytes to extract a model from.
     :return: the onnx model extracted from the tarfile bytes.
     """
-    if not tarfile.is_tarfile(str(model_tar_path)):
-        LOG.info("Model bytes do not represent a tarfile. Halting tar extraction.")
-        raise Exception("Model is not a tarfile.")
-
-    LOG.info("Extracting ONNX model from given tarfile.")
-    with contextlib.ExitStack() as stack:
-        model_tar = stack.enter_context(tarfile.open(str(model_tar_path)))
+    LOG.info("Extracting ONNX model from tarfile.")
+    with tarfile.open(str(model_tar_path)) as model_tar:
         members = model_tar.getmembers()
         onnx_members = [
             m
@@ -53,9 +49,7 @@ def _load_model_from_tar_file(model_tar_path: pathlib.Path) -> onnx.ModelProto:
         ]
 
         if not onnx_members:
-            raise Exception(
-                "No .onnx files found in given tarfile."
-            )
+            raise Exception("No .onnx files found in given tarfile.")
         if len(onnx_members) > 1:
             onnx_file_names = ", ".join(sorted(o.name for o in onnx_members))
             raise Exception(
@@ -66,17 +60,16 @@ def _load_model_from_tar_file(model_tar_path: pathlib.Path) -> onnx.ModelProto:
 
         # It's not safe to use the "extractall" API of TarFile because
         # it allows files to extract themselves into system directories.
-        # Instead, we manually extract and save the files to a tempdir.
-        tempdir = stack.enter_context(tempfile.TemporaryDirectory())
+        # Instead, we manually extract and save the files to a output_dir.
         for member in members:
             if member.isfile():
                 file_bytes = model_tar.extractfile(member).read()  # type: ignore
                 basename = os.path.basename(member.name)
-                with open(os.path.join(tempdir, basename), "wb") as f:
+                with open(os.path.join(output_dir, basename), "wb") as f:
                     f.write(file_bytes)
-        model_path = os.path.join(tempdir, os.path.basename(onnx_file.name))
+        model_path = os.path.join(output_dir, os.path.basename(onnx_file.name))
         onnx.checker.check_model(model_path)
-        return onnx.load(model_path)
+        return onnx.load(model_path), model_path
 
 
 def load_model(model_path):
@@ -89,18 +82,12 @@ def load_model(model_path):
     LOG.info("Loading an ONNXModel from file.", model_path=model_path)
     if not os.path.exists(model_path):
         raise Exception(f"File '{model_path}' not found")
-    try:
-        onnx_proto = _load_model_from_tar_file(model_tar_path=model_path)
+    if tarfile.is_tarfile(str(model_path)):
+        onnx_proto = load_model_from_tar_file(model_tar_path=model_path)
         LOG.info("ONNXModel successfully loaded from tar file")
-    except Exception:
-        try:
-            onnx_proto = onnx.load_model(str(model_path))
-            LOG.info("ONNXModel successfully loaded from file")
-        except Exception as e:
-            LOG.exception("Failed loading ONNXModel from file")
-            raise Exception(
-                "Unable to load ONNX model.", {"error": str(e)}
-            ) from e
+    else:
+        onnx_proto = onnx.load_model(str(model_path))
+        LOG.info("ONNXModel successfully loaded from file")
     return onnx_proto
 
 
@@ -112,41 +99,65 @@ def gather_models():
 
 
 def model_runner(model_path):
-    print(f"************************** {model_path}")
-    onnx_protobuf = load_model(model_path)
-    relay_model = RelayModel.from_onnx(onnx_protobuf)
-    for name, shape in relay_model.input_shapes.items():
-        print(f"input {name}, shape {shape}")
-    with tempfile.TemporaryDirectory() as tdir:
-        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
-        relay_model.package_to_onnx(
-            name="test_model",
-            tvm_target="llvm",
-            output_path=onnx_path,
-        )
-        model_dir = os.path.join(tdir, "model")
-        with tarfile.open(onnx_path, "r") as tar:
-            tar.extractall(model_dir)
-        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
-        custom_lib = os.path.join(model_dir, "custom_test_model.so")
-
-        input_data = {}
+    print(f"testing model {model_path}")
+    with tempfile.TemporaryDirectory() as onnx_unpack_dir:
+        if tarfile.is_tarfile(str(model_path)):
+            onnx_proto, model_path = load_model_from_tar_file(
+                model_tar_path=model_path, output_dir=onnx_unpack_dir
+            )
+        else:
+            onnx_proto = load_model(model_path)
+        relay_model = RelayModel.from_onnx(onnx_proto)
         for name, shape in relay_model.input_shapes.items():
-            dtype = relay_model.input_dtypes[name]
-            input_data[name] = np.random.randn(*shape).astype(np.dtype(dtype))
+            print(f"input {name}, shape {shape}")
+        with tempfile.TemporaryDirectory() as tdir:
+            onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+            relay_model.package_to_onnx(
+                name="test_model",
+                tvm_target="llvm",
+                output_path=onnx_path,
+            )
+            model_dir = os.path.join(tdir, "model")
+            with tarfile.open(onnx_path, "r") as tar:
+                tar.extractall(model_dir)
+            onnx_model_path = os.path.join(model_dir, "test_model.onnx")
+            custom_lib = os.path.join(model_dir, "custom_test_model.so")
 
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.register_custom_ops_library(custom_lib)
+            input_data = {}
+            for name, shape in relay_model.input_shapes.items():
+                dtype = relay_model.input_dtypes[name]
+                input_data[name] = np.random.randn(*shape).astype(np.dtype(dtype))
 
-        session = onnxruntime.InferenceSession(
-            onnx_model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
-        )
+            #
+            # Run the tvm packaged model
+            #
+            sess_options = onnxruntime.SessionOptions()
+            sess_options.register_custom_ops_library(custom_lib)
+            session = onnxruntime.InferenceSession(
+                onnx_model_path,
+                providers=["CPUExecutionProvider"],
+                provider_options=[{}],
+                sess_options=sess_options,
+            )
+            tvm_output = session.run(output_names=None, input_feed=input_data)
 
-        session.run(output_names=None, input_feed=input_data)
-    return 42
+            #
+            # Run the native ONNX model
+            #
+            session = onnxruntime.InferenceSession(
+                model_path,
+                providers=["CPUExecutionProvider"],
+                provider_options=[{}],
+            )
+            onnx_output = session.run(output_names=None, input_feed=input_data)
+
+            for index in range(0, len(tvm_output)):
+                mse = np.square(tvm_output[index] - onnx_output[index]).mean()
+                print(f"mse={mse}")
+                assert mse < 1e-10
+
+            print("Successfully ran tvm model in onnxruntime")
+
 
 @pytest.mark.slow
 @pytest.mark.parametrize("model_name", gather_models())
@@ -154,7 +165,12 @@ def test_models_in_models_dir(model_name):
     """So far this test is just to see if models fail to either load or run"""
     model_path = os.path.abspath(os.path.join(_MODELS_DIR, model_name))
     import subprocess
-    cmd = ["python", "-c", f"from tests.test_models import model_runner; model_runner('{model_path}')"]
-    print(" ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True)
+
+    cmd = [
+        "python",
+        "-c",
+        f"from tests.test_models import model_runner; model_runner('{model_path}')",
+    ]
+    result = subprocess.run(cmd, capture_output=True, universal_newlines=False)
+    print(result.stdout.decode(encoding="utf8"))
     assert result.returncode == 0
