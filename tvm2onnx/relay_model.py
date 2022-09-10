@@ -84,6 +84,7 @@ class RelayModel:
                     input_shapes[input_info.name] = [
                         int(s) if not isinstance(s, Any) else 1 for s in shape
                     ]
+                    input_dtypes[input_info.name] = dtype
 
         mod, params = relay.frontend.from_onnx(
             onnx_model,
