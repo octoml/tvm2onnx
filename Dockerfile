@@ -6,11 +6,11 @@ RUN apt-get update --fix-missing && \
     apt-get install -y software-properties-common && \
     apt-get update && \
     apt-get install -y \
-        build-essential \
-        clang-12 \
-        git \
-        libopenblas-dev \
-        gcc-aarch64-linux-gnu
+    build-essential \
+    clang-12 \
+    git \
+    libopenblas-dev \
+    gcc-aarch64-linux-gnu
 
 # Install a more modern cmake version
 WORKDIR /usr
@@ -55,7 +55,7 @@ COPY pyproject.toml poetry.lock ./
 RUN pip install --upgrade pip && \
     pip install poetry==1.1.15 && \
     poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi -v
+    poetry install --no-interaction --no-ansi --no-root -v
 
 WORKDIR ${TVM_HOME}
 RUN mkdir -p build && \
