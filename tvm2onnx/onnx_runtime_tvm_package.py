@@ -289,7 +289,9 @@ class ONNXRuntimeTVMPackage:
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
                 np.dtype(self._output_dtypes[name])
             ]
-            tensor = make_tensor_value_info(sanitized_name, tensortype, output.shape)
+            tensor = make_tensor_value_info(
+                sanitized_name, tensortype, self._output_shapes[name]
+            )
             output_tensors.append(tensor)
             output_names.append(sanitized_name)
 
