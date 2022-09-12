@@ -25,9 +25,12 @@ _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 @pytest.mark.parametrize(
     "dtype_str",
     [
+        "float16",
         "float32",
-        # "int32",
-        # "int64",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
     ],
 )
 def test_onnx_package(dtype_str):
@@ -77,7 +80,6 @@ def test_onnx_package(dtype_str):
 def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     """Returns an ONNX model with external constants."""
     dtype = np.dtype(dtype_str)
-    a = make_tensor_value_info("a", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
 
     if uniform:
         c1_data = np.full(shape=input_shape, fill_value=3, dtype=dtype)
@@ -104,6 +106,7 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     )
     initializers = [c1, c2]
 
+    a = make_tensor_value_info("a", NP_TYPE_TO_TENSOR_TYPE[dtype], input_shape)
     add = make_node("Add", ["a", "c1"], ["add"])
     mul = make_node("Mul", ["add", "c2"], ["result"])
 
@@ -130,15 +133,18 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
         convert_attribute=True,
     )
     onnx.save(onnx_proto, model_path)
-    onnx.save(onnx_proto, f"cmodel_{dtype_str}.onnx")
     return c1_data, c2_data
 
 
 @pytest.mark.parametrize(
     "dtype_str",
     [
+        "float16",
         "float32",
-        # "int32",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
     ],
 )
 def test_constant_model(dtype_str):
@@ -173,42 +179,6 @@ def test_constant_model(dtype_str):
 
         session = onnxruntime.InferenceSession(
             onnx_model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
-        )
-        result = session.run(output_names=None, input_feed=input_data)
-
-        expected = (input_data["a"] + c1_data) * c2_data
-        actual = result[0]
-        assert np.allclose(expected, actual)
-
-
-@pytest.mark.parametrize(
-    "dtype_str",
-    [
-        "int32",
-        "float32",
-    ],
-)
-def test_constant_model_src(dtype_str):
-    """Check that the source models generated for convertion to tvm custom op actually work
-    as onnx models."""
-    dtype = np.dtype(dtype_str)
-    input_shape = [1, 2, 8, 8]
-    with tempfile.TemporaryDirectory() as tdir:
-        model_path = os.path.join(tdir, "test.onnx")
-        c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
-        )
-
-        input_data = {}
-        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
-
-        sess_options = onnxruntime.SessionOptions()
-
-        session = onnxruntime.InferenceSession(
-            model_path,
             providers=["CPUExecutionProvider"],
             provider_options=[{}],
             sess_options=sess_options,

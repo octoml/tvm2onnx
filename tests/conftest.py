@@ -1,8 +1,11 @@
 """Provides common fixtures used through the tests."""
+import logging
 import os
 
 import pytest
 import tvm
+
+logging.captureWarnings(True)
 
 
 def pytest_addoption(parser):

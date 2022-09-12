@@ -82,8 +82,7 @@ class RelayModel:
 
                     # Normalize the shape dimensions to integers
                     input_shapes[input_info.name] = [
-                        int(s) if not isinstance(s, Any) else dynamic_axis_substitute
-                        for s in shape
+                        int(s) if not isinstance(s, Any) else 1 for s in shape
                     ]
                     input_dtypes[input_info.name] = dtype
 
@@ -175,5 +174,6 @@ class RelayModel:
             output_names = self.output_names
         for name, tensor in zip(output_names, output_list):
             shape = [dim for dim in tensor.shape]
+            shape = list(map(int, shape))
             result.append(RelayTensorDetail(name=name, shape=shape, dtype=tensor.dtype))
         return result

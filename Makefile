@@ -14,4 +14,7 @@ lint: # Checks the Python code for correct formatting and style.
 test: # Runs the unit and integration tests.
 	pytest --durations 0 tests
 
+test-slow: # Runs the unit and integration tests.
+	pytest --runslow --durations 0 tests
+
 .PHONY: format lint test
