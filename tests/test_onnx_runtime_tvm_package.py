@@ -21,17 +21,24 @@ from tvm2onnx.relay_model import RelayModel
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 
+_DTYPE_LIST = [
+    "float16",
+    "float32",
+    "float64",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
+]
+
 
 @pytest.mark.parametrize(
     "dtype_str",
-    [
-        "float16",
-        "float32",
-        "int8",
-        "int16",
-        "int32",
-        "int64",
-    ],
+    _DTYPE_LIST,
 )
 def test_onnx_package(dtype_str):
     with tempfile.TemporaryDirectory() as tdir:
@@ -138,18 +145,11 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
 
 @pytest.mark.parametrize(
     "dtype_str",
-    [
-        "float16",
-        "float32",
-        "int8",
-        "int16",
-        "int32",
-        "int64",
-    ],
+    _DTYPE_LIST,
 )
 def test_constant_model(dtype_str):
     dtype = np.dtype(dtype_str)
-    input_shape = [1, 2, 8, 8]
+    input_shape = [8, 3, 224, 224]
     with tempfile.TemporaryDirectory() as tdir:
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
