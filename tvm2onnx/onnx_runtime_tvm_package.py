@@ -24,13 +24,13 @@ from onnx.helper import (
     make_tensor_value_info,
 )
 
+import tvm2onnx
+
 from tvm2onnx.error import PackagingError
 from tvm2onnx.inputs import InputDtypes, InputShapes
 from tvm2onnx.utils import get_path_contents
 
 LOG = logging.getLogger(__name__)
-
-_CPP_TEMPLATE_PATH = "/usr/tvm2onnx/tvm2onnx/templates/onnx_custom_op"
 
 ONNXTensorElementDataType = [
     "ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED",
@@ -137,7 +137,7 @@ class ONNXRuntimeTVMPackage:
     @property
     def template_dir(self):
         """The template dir to copy and modify for this package job."""
-        return _CPP_TEMPLATE_PATH
+        return pathlib.Path(tvm2onnx.__file__).parent / "templates" / "onnx_custom_op"
 
     def cookiecutter_config(
         self,
