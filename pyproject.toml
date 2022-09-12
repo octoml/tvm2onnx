@@ -3,10 +3,13 @@ name = "tvm2onnx"
 version = "0.1.0"
 description = "Tune and convert TVM models to ONNX"
 authors = ["Robert Kimball <bobkimball@gmail.com>"]
+packages = [
+    { include = "tvm2onnx" } 
+]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.11"
-onnx = "1.12.0"
+python = ">=3.7,<3.11"
+onnx = "^1.10.0"
 cookiecutter = "^1.7.2"
 
 

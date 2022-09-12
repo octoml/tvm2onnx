@@ -9,8 +9,8 @@ import pathlib
 
 import onnx
 
-from scripts.utils import setup_logging
-from tvm2onnx.relay_model import RelayModel
+from scripts.utils.relay_model import RelayModel
+from scripts.utils.setup_logging import setup_logging
 
 logging.basicConfig(level=logging.DEBUG)
 

@@ -9,7 +9,7 @@ import onnxruntime
 import pytest
 import structlog
 
-from tvm2onnx.relay_model import RelayModel
+from scripts.utils.relay_model import RelayModel
 from tvm2onnx.utils import get_path_contents
 
 _MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
