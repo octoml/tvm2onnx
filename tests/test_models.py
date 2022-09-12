@@ -165,13 +165,64 @@ def model_runner(model_path):
 def test_models_in_models_dir(model_name):
     """So far this test is just to see if models fail to either load or run"""
     model_path = os.path.abspath(os.path.join(_MODELS_DIR, model_name))
-    import subprocess
+    with tempfile.TemporaryDirectory() as onnx_unpack_dir:
+        if tarfile.is_tarfile(str(model_path)):
+            onnx_proto, model_path = load_model_from_tar_file(
+                model_tar_path=model_path, output_dir=onnx_unpack_dir
+            )
+        else:
+            onnx_proto = load_model(model_path)
+        relay_model = RelayModel.from_onnx(onnx_proto)
+        for name, shape in relay_model.input_shapes.items():
+            print(f"input {name}, shape {shape}")
+        with tempfile.TemporaryDirectory() as tdir:
+            onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+            relay_model.package_to_onnx(
+                name="test_model",
+                tvm_target="llvm",
+                output_path=onnx_path,
+            )
+            model_dir = os.path.join(tdir, "model")
+            with tarfile.open(onnx_path, "r") as tar:
+                tar.extractall(model_dir)
+            onnx_model_path = os.path.join(model_dir, "test_model.onnx")
+            custom_lib = os.path.join(model_dir, "custom_test_model.so")
 
-    cmd = [
-        "python",
-        "-c",
-        f"from tests.test_models import model_runner; model_runner('{model_path}')",
-    ]
-    result = subprocess.run(cmd, capture_output=True, universal_newlines=False)
-    print(result.stdout.decode(encoding="utf8"))
-    assert result.returncode == 0
+            input_data = {}
+            for name, shape in relay_model.input_shapes.items():
+                dtype = relay_model.input_dtypes[name]
+                input_data[name] = np.random.randn(*shape).astype(np.dtype(dtype))
+
+            #
+            # Run the tvm packaged model
+            #
+            sess_options = onnxruntime.SessionOptions()
+            sess_options.register_custom_ops_library(custom_lib)
+            session = onnxruntime.InferenceSession(
+                onnx_model_path,
+                providers=["CPUExecutionProvider"],
+                provider_options=[{}],
+                sess_options=sess_options,
+            )
+            tvm_output = session.run(output_names=None, input_feed=input_data)
+
+            #
+            # Run the native ONNX model
+            #
+            session = onnxruntime.InferenceSession(
+                model_path,
+                providers=["CPUExecutionProvider"],
+                provider_options=[{}],
+            )
+            onnx_output = session.run(output_names=None, input_feed=input_data)
+            assert len(onnx_output) == len(relay_model.get_outputs())
+            for expected, actual in zip(relay_model.get_outputs(), onnx_output):
+                assert list(expected.shape) == list(actual.shape)
+
+            for index in range(0, len(tvm_output)):
+                mse = np.square(tvm_output[index] - onnx_output[index]).mean()
+                print(f"mse={mse}")
+                # TODO: rkimball how to set this value?
+                # assert mse < 1e-4
+
+            print("Successfully ran tvm model in onnxruntime")
