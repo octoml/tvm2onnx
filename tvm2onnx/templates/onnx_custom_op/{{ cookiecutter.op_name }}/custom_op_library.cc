@@ -25,6 +25,12 @@ template <typename T1, typename T2, typename T3>
 void cuda_add(int64_t, T3*, const T1*, const T2*, cudaStream_t compute_stream);
 #endif
 
+  extern uint8_t vm_exec_code_ro_start[] asm("_binary_vm_exec_code_ro_start");
+  extern uint8_t vm_exec_code_ro_end[] asm("_binary_vm_exec_code_ro_end");
+  extern const char model_so_start[] asm("_binary_model_so_start");
+  extern const char model_so_end[] asm("_binary_model_so_end");
+
+namespace {
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
 struct OrtCustomOpDomainDeleter {
@@ -80,12 +86,7 @@ struct TVMRuntime {
     // Binary data is linked into this shared library
     // These symbols are defined by adding lines like this to the compile string
     // -Wl,--format=binary -Wl,vm_exec_code.ro -Wl,--format=default
-    extern uint8_t vm_exec_code_ro_start[] asm("_binary_vm_exec_code_ro_start");
-    extern uint8_t vm_exec_code_ro_end[] asm("_binary_vm_exec_code_ro_end");
     size_t vm_exec_code_ro_size = vm_exec_code_ro_end - vm_exec_code_ro_start;
-
-    extern const char model_so_start[] asm("_binary_model_so_start");
-    extern const char model_so_end[] asm("_binary_model_so_end");
     size_t model_so_size = model_so_end - model_so_start;
 
     DLDeviceType dl_device_type = {{ cookiecutter.dl_device_type }};
@@ -286,6 +287,7 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
   };
 
 } c_TVMModelOp;
+} // End anonymous namespace
 
 OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api) {
   OrtCustomOpDomain* domain = nullptr;
