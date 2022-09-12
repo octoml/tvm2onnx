@@ -17,7 +17,7 @@ custom_{{cookiecutter.module_name}}.so: custom_op_library.cc
 		-o custom_{{cookiecutter.module_name}}.so \
 		custom_op_library.cc \
 		-Wl,--exclude-libs,ALL \
-		-Wl,--whole-archive $(TVM_RUNTIME_PATH)/libtvm_runtime.a -Wl,--no-whole-archive \
+		-Wl,--whole-archive {{cookiecutter.libtvm_runtime_a}} -Wl,--no-whole-archive \
 		-L. \
 		-std=c++17 \
 		-Wl,--format=binary -Wl,vm_exec_code.ro -Wl,--format=default \

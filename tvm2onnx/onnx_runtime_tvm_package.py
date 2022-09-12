@@ -13,7 +13,6 @@ from tempfile import TemporaryDirectory
 import cookiecutter.generate
 import numpy as np
 import onnx
-import tvm
 from onnx import numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
@@ -25,8 +24,8 @@ from onnx.helper import (
     make_tensor_value_info,
 )
 
-from tvm2onnx import relay_model
 from tvm2onnx.error import PackagingError
+from tvm2onnx.inputs import InputDtypes, InputShapes
 from tvm2onnx.utils import get_path_contents
 
 LOG = logging.getLogger(__name__)
@@ -101,53 +100,39 @@ class ONNXRuntimeTVMPackage:
     def __init__(
         self,
         model_name: str,
-        tvm_target: str,
-        build_dir: pathlib.Path,
+        libtvm_runtime_a: pathlib.Path,
+        model_so: pathlib.Path,
+        model_ro: pathlib.Path,
+        constants_map: typing.Dict[str, np.ndarray],
+        input_shapes: InputShapes,
+        input_dtypes: InputDtypes,
+        output_shapes: InputShapes,
+        output_dtypes: InputDtypes,
+        dl_device_type: str,
     ):
         """Initializes a new package.
 
         :param model_name: the package name
-        :param tvm_target: the target platform
-        :param build_dir: the path to the build directory
+        :param libtvm_runtime_a: the path to libtvm_runtime.a
+        :param model_so: the path to the compiled model.so
+        :param model_ro: the path to the compiled model.ro
+        :param constants_map: the map of named constants
+        :param input_shapes: the input shapes
+        :param input_dtypes: the input dtypes
+        :param output_shapes: the output shapes
+        :param output_dtypes: the output dtypes
+        :param dl_device_type: the DLDeviceType
         """
         self._model_name = sanitize_model_name(model_name)
-        self._tvm_target = tvm_target
-        self._build_dir = pathlib.Path(build_dir)
-
-        self._tvm_dir = pathlib.Path(os.path.dirname(tvm.__file__)).parent.parent
-        build_folder = self._get_build_folder(self._tvm_target, None)
-
-        self._tvm_build_dir = self._tvm_dir / build_folder
-
-    @staticmethod
-    def _get_build_folder(tvm_target, tvm_host_target):
-        """Uses the target architecture and target options to determinte the build folder
-        for picking up the correct libtvm_runtime.a file
-        This is static so it is easily tested.
-        """
-        cpu_target = tvm_host_target or tvm_target
-
-        if "aarch64-linux-gnu" in cpu_target:
-            build_cpu_part = "-aarch64"
-        elif "armv8l-linux-gnueabihf" in cpu_target:
-            build_cpu_part = "-aarch32"
-        else:
-            build_cpu_part = "-x86_64"
-
-        backend_part = ""
-        if "cuda" in tvm_target:
-            backend_part += "-cuda"
-        if "cudnn" in tvm_target:
-            backend_part += "-cudnn"
-        if "cublas" in tvm_target:
-            backend_part += "-cublas"
-        if "cblas" in tvm_target:
-            backend_part += "-openblas"
-        if "vulkan" in tvm_target:
-            backend_part += "-vulkan"
-
-        build_folder = f"build{build_cpu_part}{backend_part}"
-        return build_folder
+        self._libtvm_runtime_a = libtvm_runtime_a
+        self._model_so = model_so
+        self._model_ro = model_ro
+        self._constants_map = constants_map
+        self._input_shapes = input_shapes
+        self._input_dtypes = input_dtypes
+        self._output_shapes = output_shapes
+        self._output_dtypes = output_dtypes
+        self._dl_device_type = dl_device_type
 
     @property
     def template_dir(self):
@@ -156,19 +141,16 @@ class ONNXRuntimeTVMPackage:
 
     def cookiecutter_config(
         self,
-        model: relay_model.RelayModel,
         initializer_tensors: typing.List[TensorProto],
         domain: str,
         tvm_constant_names: typing.List[str],
     ) -> typing.Dict[str, typing.Any]:
         """Gets the cookiecutter config for the ONNX package template.
 
-        :param model: The relay model to be packaged.
         :param initializer_tensors: List of initializer (constant) tensors.
         :param domain: Custom op domain.
         :return: config to apply via cookiecutter for the ONNX custom-op template.
         """
-        dl_device_type = "kDLCUDA" if "cuda" in str(self._tvm_target) else "kDLCPU"
 
         def _emit_element(index, name, shape, dtype) -> typing.Dict[str, typing.Any]:
             onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
@@ -197,9 +179,9 @@ class ONNXRuntimeTVMPackage:
         #    Constants
         # All constants are first with the inputs following.
         index = 0
-        for name in model.input_shapes.keys():
-            shape = model.input_shapes[name]
-            dtype = model.input_dtypes[name]
+        for name in self._input_shapes.keys():
+            shape = self._input_shapes[name]
+            dtype = self._input_dtypes[name]
             var_name = f"input_{index}"
             idict = _emit_element(index, var_name, shape, dtype)
             inputs.append(idict)
@@ -214,18 +196,17 @@ class ONNXRuntimeTVMPackage:
             index += 1
 
         outputs = []
-        for index, out_info in enumerate(model.get_outputs()):
-            name = out_info.name
-            shape = out_info.shape
-            dtype = out_info.dtype
+        for index, name in enumerate(self._output_shapes.keys()):
+            shape = self._output_shapes[name]
+            dtype = self._output_dtypes[name]
             var_name = f"output_{index}"
             idict = _emit_element(index, var_name, shape, dtype)
             outputs.append(idict)
 
         input_types = []
         input_shapes = []
-        for iname, ishape in model.input_shapes.items():
-            dtype = model.input_dtypes[iname]
+        for iname, ishape in self._input_shapes.items():
+            dtype = self._input_dtypes[iname]
             onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
             input_types.append(ONNXTensorElementDataType[onnx_type])
             shape_str = f"{{{', '.join(map(str, ishape))}}}"
@@ -238,20 +219,21 @@ class ONNXRuntimeTVMPackage:
 
         output_dtypes = []
         output_shapes = []
-        for out_info in model.get_outputs():
-            dtype = out_info.dtype
+        for name, shape in self._output_shapes.items():
+            dtype = self._output_dtypes[name]
             onnx_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
             output_dtypes.append(ONNXTensorElementDataType[onnx_type])
-            shape_str = f"{{{', '.join(map(str, out_info.shape))}}}"
+            shape_str = f"{{{', '.join(map(str, shape))}}}"
             output_shapes.append(shape_str)
 
         # Give the custom op a globally unique name
         self.custom_op_name = f"op_{uuid.uuid4().hex}"
         return {
             "op_name": "custom_op_library_source",
+            "libtvm_runtime_a": str(self._libtvm_runtime_a),
             "module_name": self._model_name,
             "custom_op_name": self.custom_op_name,
-            "dl_device_type": dl_device_type,
+            "dl_device_type": self._dl_device_type,
             "input_count": str(len(inputs)),
             "output_count": str(len(outputs)),
             "initializer_count": str(len(initializers)),
@@ -276,9 +258,7 @@ class ONNXRuntimeTVMPackage:
             name = name[:colon_index]
         return name
 
-    def build_package(
-        self, model: relay_model.RelayModel, build_dir: pathlib.Path
-    ) -> pathlib.Path:
+    def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
         """Exports the relay model as an onnx model where the relay model is
         represented as a single onnx custom operator. Constants are exported as
         onnx protobuf files.
@@ -295,29 +275,26 @@ class ONNXRuntimeTVMPackage:
         tvm_constant_names = []
         domain = "octoml.ai"
 
-        for name in model.input_dtypes.keys():
+        for name in self._input_dtypes.keys():
             sanitized_name = self._sanitize_io_name(name)
-            shape = model.input_shapes[name]
-            dtype = model.input_dtypes[name]
+            shape = self._input_shapes[name]
+            dtype = self._input_dtypes[name]
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
             tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
             input_tensors.append(tensor)
             custom_op_input_names.append(sanitized_name)
 
-        for output in model.get_outputs():
-            sanitized_name = self._sanitize_io_name(output.name)
+        for name in self._output_dtypes.keys():
+            sanitized_name = self._sanitize_io_name(name)
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
-                np.dtype(output.dtype)
+                np.dtype(self._output_dtypes[name])
             ]
             tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
             output_tensors.append(tensor)
             output_names.append(sanitized_name)
 
-        constants = model.compile(self._tvm_target, build_dir)
-
-        for name, data in constants.items():
+        for name, np_data in self._constants_map.items():
             tvm_constant_names.append(name)
-            np_data = data.numpy()
             constant_tensor = make_tensor(
                 name=name,
                 data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np_data.dtype],
@@ -328,16 +305,22 @@ class ONNXRuntimeTVMPackage:
             custom_op_input_names.append(name)
             initializers.append(constant_tensor)
 
-        cc_config = self.cookiecutter_config(
-            model, initializers, domain, tvm_constant_names
-        )
-        self._create_from_template(cc_config, self._build_dir)
+        cc_config = self.cookiecutter_config(initializers, domain, tvm_constant_names)
+        self._create_from_template(cc_config, build_dir)
 
         source = os.path.join(build_dir, "custom_op_library_source")
         target = os.path.join(build_dir)
         shutil.move(os.path.join(source, "custom_op_library.cc"), target)
         shutil.move(os.path.join(source, "custom_op_library.h"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
+        try:
+            shutil.copy(self._model_so, os.path.join(target, "model.so"))
+        except shutil.SameFileError:
+            pass
+        try:
+            shutil.copy(self._model_ro, os.path.join(target, "vm_exec_code.ro"))
+        except shutil.SameFileError:
+            pass
         make_dir = build_dir
         custom_op_name = f"custom_{self._model_name}.so"
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:
@@ -391,15 +374,6 @@ class ONNXRuntimeTVMPackage:
                 onnx_tar.add(os.path.join(build_dir, custom_op_name), custom_op_name)
 
             return pathlib.Path(onnx_archive)
-
-    def build(self, model: relay_model.RelayModel) -> pathlib.Path:
-        """Packages the given model.
-
-        :param model: the model to package
-        :return: the path of the generated package
-        """
-        package_path = self.build_package(model=model, build_dir=self._build_dir)
-        return package_path
 
     def _create_from_template(
         self, config: typing.Dict[str, str], build_dir: pathlib.Path
