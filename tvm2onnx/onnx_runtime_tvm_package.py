@@ -17,7 +17,6 @@ from onnx import numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
     TensorProto,
-    make_attribute,
     make_graph,
     make_model,
     make_node,
@@ -109,6 +108,7 @@ class ONNXRuntimeTVMPackage:
         output_shapes: InputShapes,
         output_dtypes: InputDtypes,
         dl_device_type: str,
+        metadata: typing.Dict[str, str] = {},
     ):
         """Initializes a new package.
 
@@ -133,6 +133,7 @@ class ONNXRuntimeTVMPackage:
         self._output_shapes = output_shapes
         self._output_dtypes = output_dtypes
         self._dl_device_type = dl_device_type
+        self._metadata = metadata
 
     @property
     def template_dir(self):
@@ -258,9 +259,7 @@ class ONNXRuntimeTVMPackage:
             name = name[:colon_index]
         return name
 
-    def build_package(
-        self, build_dir: pathlib.Path, metadata: typing.Dict[str, str] = {}
-    ) -> pathlib.Path:
+    def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
         """Exports the relay model as an onnx model where the relay model is
         represented as a single onnx custom operator. Constants are exported as
         onnx protobuf files.
@@ -342,8 +341,6 @@ class ONNXRuntimeTVMPackage:
             domain=domain,
             name=self._model_name,
         )
-        for key, value in metadata.items():
-            custom_op.attribute.append(make_attribute(key, value))
         graph_nodes.append(custom_op)
 
         graph = make_graph(
@@ -361,6 +358,10 @@ class ONNXRuntimeTVMPackage:
             size_threshold=1024,
             convert_attribute=True,
         )
+        for key, value in self._metadata.items():
+            meta = onnx_proto.metadata_props.add()
+            meta.key = key
+            meta.value = value
         # onnx_save_dir is the directory where the .onnx model file along with any
         # external constants files are written. There may be multiple files here
         # with unknown names but they all belong in the output file.

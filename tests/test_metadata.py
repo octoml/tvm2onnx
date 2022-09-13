@@ -1,9 +1,14 @@
+import os
+import tarfile
+import tempfile
 import typing
 
 import numpy as np
 import onnx
 from onnx.helper import make_graph, make_model, make_node, make_tensor_value_info
 from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
+
+from tvm2onnx.relay_model import RelayModel
 
 
 def build_model(metadata: typing.Dict[str, str]):
@@ -26,10 +31,6 @@ def build_model(metadata: typing.Dict[str, str]):
     )
 
     onnx_proto = make_model(graph)
-    for key, value in metadata.items():
-        meta = onnx_proto.metadata_props.add()
-        meta.key = key
-        meta.value = value
     onnx.checker.check_model(onnx_proto)
     return onnx_proto
 
@@ -37,7 +38,20 @@ def build_model(metadata: typing.Dict[str, str]):
 def test_metadata():
     metadata = {"key1": "value1", "key2": "value2"}
     onnx_proto = build_model(metadata=metadata)
-    assert len(onnx_proto.metadata_props) == len(metadata)
-    for prop in onnx_proto.metadata_props:
-        assert prop.key in metadata.keys()
-        assert prop.value == metadata[prop.key]
+    relay_model = RelayModel.from_onnx(onnx_proto)
+    with tempfile.TemporaryDirectory() as tdir:
+        saved_path = os.path.join(tdir, "metadata_test.tvm.onnx")
+        relay_model.package_to_onnx(
+            name="metadata_test",
+            tvm_target="llvm",
+            output_path=saved_path,
+            metadata=metadata,
+        )
+        with tarfile.open(saved_path, "r") as tar:
+            tar.extractall(tdir)
+            loaded_proto = onnx.load_model(os.path.join(tdir, "metadata_test.onnx"))
+
+            assert len(loaded_proto.metadata_props) == len(metadata)
+            for prop in loaded_proto.metadata_props:
+                assert prop.key in metadata.keys()
+                assert prop.value == metadata[prop.key]
