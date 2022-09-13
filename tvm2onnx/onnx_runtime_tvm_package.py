@@ -17,6 +17,7 @@ from onnx import numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
     TensorProto,
+    make_attribute,
     make_graph,
     make_model,
     make_node,
@@ -257,7 +258,9 @@ class ONNXRuntimeTVMPackage:
             name = name[:colon_index]
         return name
 
-    def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
+    def build_package(
+        self, build_dir: pathlib.Path, metadata: typing.Dict[str, str] = {}
+    ) -> pathlib.Path:
         """Exports the relay model as an onnx model where the relay model is
         represented as a single onnx custom operator. Constants are exported as
         onnx protobuf files.
@@ -339,6 +342,8 @@ class ONNXRuntimeTVMPackage:
             domain=domain,
             name=self._model_name,
         )
+        for key, value in metadata.items():
+            custom_op.attribute.append(make_attribute(key, value))
         graph_nodes.append(custom_op)
 
         graph = make_graph(
