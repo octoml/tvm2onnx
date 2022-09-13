@@ -7,7 +7,7 @@ import onnx
 from onnx.helper import make_graph, make_model, make_node, make_tensor_value_info
 from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 
-from tvm2onnx.relay_model import RelayModel
+from scripts.utils.relay_model import RelayModel
 
 
 def build_model():
