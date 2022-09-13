@@ -108,6 +108,7 @@ class ONNXRuntimeTVMPackage:
         output_shapes: InputShapes,
         output_dtypes: InputDtypes,
         dl_device_type: str,
+        metadata: typing.Dict[str, str] = {},
     ):
         """Initializes a new package.
 
@@ -132,6 +133,7 @@ class ONNXRuntimeTVMPackage:
         self._output_shapes = output_shapes
         self._output_dtypes = output_dtypes
         self._dl_device_type = dl_device_type
+        self._metadata = metadata
 
     @property
     def template_dir(self):
@@ -356,6 +358,10 @@ class ONNXRuntimeTVMPackage:
             size_threshold=1024,
             convert_attribute=True,
         )
+        for key, value in self._metadata.items():
+            meta = onnx_proto.metadata_props.add()
+            meta.key = key
+            meta.value = value
         # onnx_save_dir is the directory where the .onnx model file along with any
         # external constants files are written. There may be multiple files here
         # with unknown names but they all belong in the output file.
