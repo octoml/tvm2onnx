@@ -6,11 +6,11 @@ RUN apt-get update --fix-missing && \
     apt-get install -y software-properties-common && \
     apt-get update && \
     apt-get install -y \
-    build-essential \
-    clang-12 \
-    git \
-    libopenblas-dev \
-    gcc-aarch64-linux-gnu
+        build-essential \
+        clang-12 \
+        git \
+        libopenblas-dev \
+        gcc-aarch64-linux-gnu
 
 # Install a more modern cmake version
 WORKDIR /usr
