@@ -1,7 +1,6 @@
 import os
 import tarfile
 import tempfile
-import typing
 
 import numpy as np
 import onnx
@@ -11,7 +10,7 @@ from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 from tvm2onnx.relay_model import RelayModel
 
 
-def build_model(metadata: typing.Dict[str, str]):
+def build_model():
     dtype = np.dtype("float32")
     input_shape = [2, 3]
 
@@ -37,7 +36,7 @@ def build_model(metadata: typing.Dict[str, str]):
 
 def test_metadata():
     metadata = {"key1": "value1", "key2": "value2"}
-    onnx_proto = build_model(metadata=metadata)
+    onnx_proto = build_model()
     relay_model = RelayModel.from_onnx(onnx_proto)
     with tempfile.TemporaryDirectory() as tdir:
         saved_path = os.path.join(tdir, "metadata_test.tvm.onnx")
