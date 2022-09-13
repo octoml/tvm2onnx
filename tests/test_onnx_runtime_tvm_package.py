@@ -17,7 +17,7 @@ from onnx.helper import (
 )
 from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 
-from tvm2onnx.relay_model import RelayModel
+from scripts.utils.relay_model import RelayModel
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 

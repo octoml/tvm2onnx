@@ -55,7 +55,7 @@ COPY pyproject.toml poetry.lock ./
 RUN pip install --upgrade pip && \
     pip install poetry==1.1.15 && \
     poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi -v
+    poetry install --no-interaction --no-ansi --no-root -v
 
 WORKDIR ${TVM_HOME}
 RUN mkdir -p build && \

@@ -82,7 +82,8 @@ class RelayModel:
 
                     # Normalize the shape dimensions to integers
                     input_shapes[input_info.name] = [
-                        int(s) if not isinstance(s, Any) else 1 for s in shape
+                        int(s) if not isinstance(s, Any) else dynamic_axis_substitute
+                        for s in shape
                     ]
                     input_dtypes[input_info.name] = dtype
 
