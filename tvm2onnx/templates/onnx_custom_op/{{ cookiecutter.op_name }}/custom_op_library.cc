@@ -19,16 +19,10 @@
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/vm/vm.h>
 
-#ifdef USE_CUDA
-#include <cuda_runtime.h>
-template <typename T1, typename T2, typename T3>
-void cuda_add(int64_t, T3*, const T1*, const T2*, cudaStream_t compute_stream);
-#endif
-
-  extern uint8_t vm_exec_code_ro_start[] asm("_binary_vm_exec_code_ro_start");
-  extern uint8_t vm_exec_code_ro_end[] asm("_binary_vm_exec_code_ro_end");
-  extern const char model_so_start[] asm("_binary_model_so_start");
-  extern const char model_so_end[] asm("_binary_model_so_end");
+extern uint8_t vm_exec_code_ro_start[] asm("_binary_vm_exec_code_ro_start");
+extern uint8_t vm_exec_code_ro_end[] asm("_binary_vm_exec_code_ro_end");
+extern const char model_so_start[] asm("_binary_model_so_start");
+extern const char model_so_end[] asm("_binary_model_so_end");
 
 namespace {
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
@@ -259,10 +253,6 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
     auto name = "{{cookiecutter.custom_op_name}}";
     return name;
   };
-
-#ifdef USE_CUDA
-  const char* GetExecutionProviderType() const { return "CUDAExecutionProvider"; };
-#endif
 
   size_t GetInputTypeCount() const { return {{cookiecutter.input_count}} + {{cookiecutter.initializer_count}}; };
   ONNXTensorElementDataType GetInputType(size_t index) const {
