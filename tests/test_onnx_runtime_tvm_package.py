@@ -188,3 +188,47 @@ def test_constant_model(dtype_str):
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
         assert np.allclose(expected, actual)
+
+
+def test_debug_build():
+    dtype = np.dtype("float32")
+    input_shape = [8, 3, 224, 224]
+    with tempfile.TemporaryDirectory() as tdir:
+        model_path = os.path.join(tdir, "test.onnx")
+        c1_data, c2_data = add_constant_onnx_model(
+            model_dir=tdir, input_shape=input_shape, dtype_str="float32", uniform=True
+        )
+        relay_model = RelayModel.from_onnx(
+            onnx.load(model_path), dynamic_axis_substitute=1
+        )
+        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+        relay_model.package_to_onnx(
+            name=f"test_model_debug",
+            tvm_target="llvm",
+            output_path=onnx_path,
+            debug_build=True,
+        )
+        model_dir = os.path.join(tdir, "model")
+        with tarfile.open(onnx_path, "r") as tar:
+            tar.extractall(model_dir)
+
+        onnx_model_path = os.path.join(model_dir, f"test_model_debug.onnx")
+        custom_lib = os.path.join(model_dir, f"custom_test_model_debug.so")
+
+        input_data = {}
+        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
+
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.register_custom_ops_library(custom_lib)
+
+        session = onnxruntime.InferenceSession(
+            onnx_model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
+        )
+        result = session.run(output_names=None, input_feed=input_data)
+
+        expected = (input_data["a"] + c1_data) * c2_data
+        actual = result[0]
+        assert np.allclose(expected, actual)
