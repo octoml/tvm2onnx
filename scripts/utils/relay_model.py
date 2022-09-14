@@ -20,6 +20,7 @@ from tvm.tir.expr import Any
 from tvm2onnx import inputs
 from tvm2onnx.error import TVM2ONNXError
 from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
+from tvm2onnx.utils import gen_shared_library_name, gen_static_library_name
 
 LOG = logging.getLogger(__name__)
 
@@ -134,19 +135,21 @@ class RelayModel:
             with open(ro_path, "wb") as fo:
                 fo.write(vm_exec_code)
 
-            so_path = tdir_path / "model.so"
+            model_library_name = gen_shared_library_name("model")
+            model_lib_path = tdir_path / model_library_name
 
             # Save module.
-            mod.export_library(str(so_path))
+            mod.export_library(str(model_lib_path))
 
-            libtvm_runtime_a = (
-                pathlib.Path(os.environ["TVM_HOME"]) / "build" / "libtvm_runtime.a"
+            tvm_runtime_name = gen_static_library_name("tvm_runtime")
+            tvm_runtime_lib = (
+                pathlib.Path(os.environ["TVM_HOME"]) / "build" / tvm_runtime_name
             )
             outputs = self.get_outputs()
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
-                tvm_runtime_lib=libtvm_runtime_a,
-                model_lib=so_path,
+                tvm_runtime_lib=tvm_runtime_lib,
+                model_lib=model_lib_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
                 input_shapes=self.input_shapes,
