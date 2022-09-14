@@ -8,6 +8,7 @@ def print_path_contents(dir_root):
 
 
 def get_path_contents(dir_root) -> typing.List[str]:
+    dir_root = str(dir_root)
     contents = []
     for lists in os.listdir(dir_root):
         path = os.path.join(dir_root, lists)

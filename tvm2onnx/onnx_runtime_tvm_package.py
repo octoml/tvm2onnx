@@ -99,8 +99,8 @@ class ONNXRuntimeTVMPackage:
     def __init__(
         self,
         model_name: str,
-        libtvm_runtime_a: pathlib.Path,
-        model_so: pathlib.Path,
+        tvm_runtime_lib: pathlib.Path,
+        model_lib: pathlib.Path,
         model_ro: pathlib.Path,
         constants_map: typing.Dict[str, np.ndarray],
         input_shapes: InputShapes,
@@ -113,8 +113,8 @@ class ONNXRuntimeTVMPackage:
         """Initializes a new package.
 
         :param model_name: the package name
-        :param libtvm_runtime_a: the path to libtvm_runtime.a
-        :param model_so: the path to the compiled model.so
+        :param libtvm_runtime_a: the path to tvm_runtime library
+        :param model_lib: the path to the compiled model library
         :param model_ro: the path to the compiled model.ro
         :param constants_map: the map of named constants
         :param input_shapes: the input shapes
@@ -124,8 +124,8 @@ class ONNXRuntimeTVMPackage:
         :param dl_device_type: the DLDeviceType
         """
         self._model_name = sanitize_model_name(model_name)
-        self._libtvm_runtime_a = libtvm_runtime_a
-        self._model_so = model_so
+        self._tvm_runtime_lib = tvm_runtime_lib
+        self._model_lib = model_lib
         self._model_ro = model_ro
         self._constants_map = constants_map
         self._input_shapes = input_shapes
@@ -231,7 +231,7 @@ class ONNXRuntimeTVMPackage:
         self.custom_op_name = f"op_{uuid.uuid4().hex}"
         return {
             "op_name": "custom_op_library_source",
-            "libtvm_runtime_a": str(self._libtvm_runtime_a),
+            "libtvm_runtime_a": str(self._tvm_runtime_lib),
             "module_name": self._model_name,
             "custom_op_name": self.custom_op_name,
             "dl_device_type": self._dl_device_type,
@@ -316,8 +316,9 @@ class ONNXRuntimeTVMPackage:
         shutil.move(os.path.join(source, "custom_op_library.cc"), target)
         shutil.move(os.path.join(source, "custom_op_library.h"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
+        shutil.move(os.path.join(source, "CMakeLists.txt"), target)
         try:
-            shutil.copy(self._model_so, os.path.join(target, "model.so"))
+            shutil.copy(self._model_lib, os.path.join(target, "model.so"))
         except shutil.SameFileError:
             pass
         try:
