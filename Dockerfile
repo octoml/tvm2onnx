@@ -10,7 +10,8 @@ RUN apt-get update --fix-missing && \
         clang-12 \
         git \
         libopenblas-dev \
-        gcc-aarch64-linux-gnu
+        gcc-aarch64-linux-gnu \
+        gcc-mingw-w64-x86-64
 
 # Install a more modern cmake version
 WORKDIR /usr
