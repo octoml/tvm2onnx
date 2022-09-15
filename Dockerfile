@@ -11,8 +11,7 @@ RUN apt-get update --fix-missing && \
         git \
         libopenblas-dev \
         gcc-aarch64-linux-gnu \
-        gcc-mingw-w64-x86-64 \
-        g++-mingw-w64-x86-64
+        mingw-w64
 
 # Install a more modern cmake version
 WORKDIR /usr
@@ -32,7 +31,7 @@ ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
 # Set to ascii to make stdout for subprocess.run in ascii. No funky chars.
-ENV LC_ALL="en_US.ascii"
+# ENV LC_ALL="en_US.ascii"
 
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
@@ -60,18 +59,18 @@ RUN pip install --upgrade pip && \
     poetry install --no-interaction --no-ansi --no-root -v
 
 WORKDIR ${TVM_HOME}
-RUN mkdir -p build && \
-    cd       build && \
-    cp ../cmake/config.cmake . && \
-    echo "set(USE_LLVM llvm-config-12)" >> config.cmake && \
-    echo "set(USE_LIBBACKTRACE OFF)" >> config.cmake && \
-    echo "set(USE_SORT ON)" >> config.cmake && \
-    echo "set(USE_RPC OFF)" >> config.cmake && \
-    echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
-    echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake && \
-    cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-    make -j $(nproc) && \
-    strip libtvm.so
+# RUN mkdir -p build && \
+#     cd       build && \
+#     cp ../cmake/config.cmake . && \
+#     echo "set(USE_LLVM llvm-config-12)" >> config.cmake && \
+#     echo "set(USE_LIBBACKTRACE OFF)" >> config.cmake && \
+#     echo "set(USE_SORT ON)" >> config.cmake && \
+#     echo "set(USE_RPC OFF)" >> config.cmake && \
+#     echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
+#     echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake && \
+#     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+#     make -j $(nproc) && \
+#     strip libtvm.so
 
 RUN mkdir -p build-win && \
     cd       build-win && \
@@ -81,12 +80,14 @@ RUN mkdir -p build-win && \
     echo "set(USE_SORT ON)" >> config.cmake && \
     echo "set(USE_RPC OFF)" >> config.cmake && \
     echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
-    echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake && \
+    echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake
+    #  && \
     cmake .. \
+        -DCMAKE_SYSTEM_NAME=Windows \
         -DCMAKE_C_COMPILER=/usr/bin/x86_64-w64-mingw32-gcc \
         -DCMAKE_CXX_COMPILER=/usr/bin/x86_64-w64-mingw32-g++ \
-        -DCMAKE_BUILD_TYPE=Release && \
-    make -j $(nproc) runtime
+        -DCMAKE_BUILD_TYPE=Release
+    # make -j $(nproc) runtime
 
 
 # Environment variables for CUDA.
