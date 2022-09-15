@@ -146,7 +146,7 @@ class RelayModel:
             outputs = self.get_outputs()
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
-                libtvm_runtime_a=libtvm_runtime_a,
+                tvm_runtime_lib=libtvm_runtime_a,
                 tvm_dynamic_libraries=["pthread", "cuda", "cudart"]
                 if "cuda" in tvm_target
                 else ["pthread"],
