@@ -11,7 +11,8 @@ RUN apt-get update --fix-missing && \
         git \
         libopenblas-dev \
         gcc-aarch64-linux-gnu \
-        gcc-mingw-w64-x86-64
+        gcc-mingw-w64-x86-64 \
+        g++-mingw-w64-x86-64
 
 # Install a more modern cmake version
 WORKDIR /usr
@@ -81,9 +82,11 @@ RUN mkdir -p build-win && \
     echo "set(USE_RPC OFF)" >> config.cmake && \
     echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
     echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake && \
-    cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-    make -j $(nproc) && \
-    strip libtvm.so
+    cmake .. \
+        -DCMAKE_C_COMPILER=/usr/bin/x86_64-w64-mingw32-gcc \
+        -DCMAKE_CXX_COMPILER=/usr/bin/x86_64-w64-mingw32-g++ \
+        -DCMAKE_BUILD_TYPE=Release && \
+    make -j $(nproc) runtime
 
 
 # Environment variables for CUDA.
