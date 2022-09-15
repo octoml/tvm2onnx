@@ -150,6 +150,7 @@ class RelayModel:
                 tvm_dynamic_libraries=["pthread", "cuda", "cudart"]
                 if "cuda" in tvm_target
                 else ["pthread"],
+                library_search_paths=[],
                 model_so=so_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
