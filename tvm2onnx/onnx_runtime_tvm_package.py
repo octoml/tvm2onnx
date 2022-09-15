@@ -99,7 +99,8 @@ class ONNXRuntimeTVMPackage:
     def __init__(
         self,
         model_name: str,
-        libtvm_runtime_a: pathlib.Path,
+        tvm_runtime_lib: pathlib.Path,
+        tvm_dynamic_libraries: typing.List[str],
         model_so: pathlib.Path,
         model_ro: pathlib.Path,
         constants_map: typing.Dict[str, np.ndarray],
@@ -109,11 +110,13 @@ class ONNXRuntimeTVMPackage:
         output_dtypes: InputDtypes,
         dl_device_type: str,
         metadata: typing.Dict[str, str] = {},
+        debug_build: bool = False,
     ):
         """Initializes a new package.
 
         :param model_name: the package name
-        :param libtvm_runtime_a: the path to libtvm_runtime.a
+        :param tvm_runtime_lib: the path to the static TVM runtime lib
+        :param tvm_dynamic_libraries: dynamic libraries that the TVM runtime requires
         :param model_so: the path to the compiled model.so
         :param model_ro: the path to the compiled model.ro
         :param constants_map: the map of named constants
@@ -122,9 +125,11 @@ class ONNXRuntimeTVMPackage:
         :param output_shapes: the output shapes
         :param output_dtypes: the output dtypes
         :param dl_device_type: the DLDeviceType
+        :param debug_build: whether to generate a debug build
         """
         self._model_name = sanitize_model_name(model_name)
-        self._libtvm_runtime_a = libtvm_runtime_a
+        self._tvm_runtime_lib = tvm_runtime_lib
+        self._tvm_dynamic_libraries = tvm_dynamic_libraries
         self._model_so = model_so
         self._model_ro = model_ro
         self._constants_map = constants_map
@@ -134,6 +139,7 @@ class ONNXRuntimeTVMPackage:
         self._output_dtypes = output_dtypes
         self._dl_device_type = dl_device_type
         self._metadata = metadata
+        self._debug_build = debug_build
 
     @property
     def template_dir(self):
@@ -231,7 +237,7 @@ class ONNXRuntimeTVMPackage:
         self.custom_op_name = f"op_{uuid.uuid4().hex}"
         return {
             "op_name": "custom_op_library_source",
-            "libtvm_runtime_a": str(self._libtvm_runtime_a),
+            "libtvm_runtime_a": str(self._tvm_runtime_lib),
             "module_name": self._model_name,
             "custom_op_name": self.custom_op_name,
             "dl_device_type": self._dl_device_type,
@@ -246,6 +252,8 @@ class ONNXRuntimeTVMPackage:
             "outputs": outputs,
             "initializers": initializers,
             "domain": domain,
+            "dynamic_libraries": self._tvm_dynamic_libraries,
+            "debug_build": self._debug_build,
         }
 
     def _sanitize_io_name(self, name: str) -> str:

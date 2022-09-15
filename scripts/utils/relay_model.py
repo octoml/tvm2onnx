@@ -107,6 +107,7 @@ class RelayModel:
         tvm_target: str,
         output_path: pathlib.Path,
         metadata: typing.Dict[str, str] = {},
+        debug_build: bool = False,
     ):
         """Builds the ONNX file and returns the path to the package.
 
@@ -145,7 +146,10 @@ class RelayModel:
             outputs = self.get_outputs()
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
-                libtvm_runtime_a=libtvm_runtime_a,
+                tvm_runtime_lib=libtvm_runtime_a,
+                tvm_dynamic_libraries=["pthread", "cuda", "cudart"]
+                if "cuda" in tvm_target
+                else ["pthread"],
                 model_so=so_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
@@ -155,6 +159,7 @@ class RelayModel:
                 output_dtypes={t.name: t.dtype for t in outputs},
                 dl_device_type="kDLCUDA" if "cuda" in tvm_target else "kDLCPU",
                 metadata=metadata,
+                debug_build=debug_build,
             )
             onnx_tar = packager.build_package(tdir_path)
             shutil.move(str(onnx_tar), str(output_path))
