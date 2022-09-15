@@ -101,6 +101,23 @@ class RelayModel:
             [tensor.name for tensor in onnx_model.graph.output],
         )
 
+    @staticmethod
+    def shared_object_build_func(host_target: str):
+        """Gets a TVM build function for creating a shared object
+
+        :param host_target: the TVM target host
+        :return: a function to be passed to `export_library`
+        """
+        if "aarch64-linux-gnu" in host_target:
+            return cc.cross_compiler("aarch64-linux-gnu-gcc")
+        elif "armv8l-linux-gnueabihf" in host_target:
+            return cc.cross_compiler("arm-linux-gnueabihf-gcc")
+        elif "x86_64-w64-mingw32" in host_target:
+            return cc.cross_compiler("x86_64-w64-mingw32-gcc")
+        else:
+            # The above are the only cross-compile targets we currently support.
+            return cc.create_shared
+
     def package_to_onnx(
         self,
         name: str,
@@ -134,18 +151,18 @@ class RelayModel:
             with open(ro_path, "wb") as fo:
                 fo.write(vm_exec_code)
 
-            so_path = tdir_path / "model.so"
+            so_path = tdir_path / "model.dll"
 
             # Save module.
-            mod.export_library(str(so_path))
+            mod.export_library(str(so_path), shared_object_build_func("x86_64-w64-mingw32"))
 
-            libtvm_runtime_a = (
-                pathlib.Path(os.environ["TVM_HOME"]) / "build" / "libtvm_runtime.a"
+            tvm_runtime = (
+                pathlib.Path(os.environ["TVM_HOME"]) / "build" / "tvm_runtime.lib"
             )
             outputs = self.get_outputs()
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
-                libtvm_runtime_a=libtvm_runtime_a,
+                libtvm_runtime_a=tvm_runtime,
                 model_so=so_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
