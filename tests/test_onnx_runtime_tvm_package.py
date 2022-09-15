@@ -54,6 +54,7 @@ def test_onnx_package(dtype_str):
         model_dir = os.path.join(tdir, "model")
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
+        breakpoint()
         onnx_model_path = os.path.join(model_dir, "test_model.onnx")
         custom_lib = os.path.join(model_dir, "custom_test_model.so")
 

@@ -27,7 +27,7 @@ from onnx.helper import (
 import tvm2onnx
 from tvm2onnx.error import PackagingError
 from tvm2onnx.inputs import InputDtypes, InputShapes
-from tvm2onnx.utils import get_path_contents
+from tvm2onnx.utils import gen_shared_library_name, get_path_contents
 
 LOG = logging.getLogger(__name__)
 
@@ -315,7 +315,7 @@ class ONNXRuntimeTVMPackage:
         target = os.path.join(build_dir)
         shutil.move(os.path.join(source, "custom_op_library.cc"), target)
         shutil.move(os.path.join(source, "custom_op_library.h"), target)
-        shutil.move(os.path.join(source, "Makefile"), target)
+        # shutil.move(os.path.join(source, "Makefile"), target)
         shutil.move(os.path.join(source, "CMakeLists.txt"), target)
         try:
             shutil.copy(self._model_lib, os.path.join(target, "model.so"))
@@ -326,10 +326,17 @@ class ONNXRuntimeTVMPackage:
         except shutil.SameFileError:
             pass
         make_dir = build_dir
-        custom_op_name = f"custom_{self._model_name}.so"
+        custom_op_name = f"custom_{self._model_name}"
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:
             LOG.debug("custom op library generated: " + f.read())
-        result = subprocess.run(["make"], capture_output=True, cwd=make_dir, text=True)
+        cmd = ["cmake", "."]
+        result = subprocess.run(cmd, capture_output=True, cwd=make_dir, text=True)
+        if not result.returncode == 0:
+            err = result.stderr
+            LOG.error("Error compiling custom op library:\n" + err)
+            raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
+        cmd = ["cmake", "--build", "."]
+        result = subprocess.run(cmd, capture_output=True, cwd=make_dir, text=True)
         if not result.returncode == 0:
             err = result.stderr
             LOG.error("Error compiling custom op library:\n" + err)
@@ -379,7 +386,10 @@ class ONNXRuntimeTVMPackage:
             with tarfile.open(onnx_archive, "w") as onnx_tar:
                 for file in get_path_contents(onnx_save_dir):
                     onnx_tar.add(os.path.join(onnx_save_dir, file), file)
-                onnx_tar.add(os.path.join(build_dir, custom_op_name), custom_op_name)
+                onnx_tar.add(
+                    os.path.join(build_dir, gen_shared_library_name(custom_op_name)),
+                    custom_op_name,
+                )
 
             return pathlib.Path(onnx_archive)
 

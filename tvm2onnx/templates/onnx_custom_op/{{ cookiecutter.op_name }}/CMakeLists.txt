@@ -4,10 +4,11 @@ set(LIB_NAME custom_{{cookiecutter.module_name}})
 project(custom_op LANGUAGES C CXX)
 
 add_library(
-    ${LIB_NAME} SHARED
+    ${LIB_NAME} MODULE
     custom_op_library.cc
 )
 
+set(CMAKE_SHARED_LIBRARY_PREFIX "blah_")
 target_include_directories(
     ${LIB_NAME}
     PRIVATE
@@ -36,7 +37,7 @@ target_link_libraries(
         {{cookiecutter.libtvm_runtime_a}}
         "-Wl,--no-whole-archive"
         "-Wl,--format=binary -Wl,vm_exec_code.ro -Wl,--format=default"
-        "-Wl,--format=binary -Wl,model.dll -Wl,--format=default"
+        "-Wl,--format=binary -Wl,model.so -Wl,--format=default"
 
 )
 
