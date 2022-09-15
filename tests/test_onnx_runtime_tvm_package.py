@@ -203,7 +203,7 @@ def test_debug_build():
         )
         onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
         relay_model.package_to_onnx(
-            name=f"test_model_debug",
+            name="test_model_debug",
             tvm_target="llvm",
             output_path=onnx_path,
             debug_build=True,
@@ -212,8 +212,8 @@ def test_debug_build():
         with tarfile.open(onnx_path, "r") as tar:
             tar.extractall(model_dir)
 
-        onnx_model_path = os.path.join(model_dir, f"test_model_debug.onnx")
-        custom_lib = os.path.join(model_dir, f"custom_test_model_debug.so")
+        onnx_model_path = os.path.join(model_dir, "test_model_debug.onnx")
+        custom_lib = os.path.join(model_dir, "custom_test_model_debug.so")
 
         input_data = {}
         input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
