@@ -13,6 +13,9 @@ RUN apt-get update --fix-missing && \
         gcc-aarch64-linux-gnu \
         mingw-w64
 
+RUN update-alternatives --install /usr/bin/x86_64-w64-mingw32-gcc x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix 100
+RUN update-alternatives --install /usr/bin/x86_64-w64-mingw32-g++ x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix 100
+
 # Install a more modern cmake version
 WORKDIR /usr
 RUN mkdir cmake_build && \
@@ -88,6 +91,8 @@ RUN mkdir -p build-win && \
         -DCMAKE_CXX_COMPILER=/usr/bin/x86_64-w64-mingw32-g++ \
         -DCMAKE_BUILD_TYPE=Release
     # make -j $(nproc) runtime
+
+RUN update-alternatives 
 
 
 # Environment variables for CUDA.
