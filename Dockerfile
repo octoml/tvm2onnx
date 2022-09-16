@@ -7,7 +7,7 @@ RUN apt-get update --fix-missing && \
     apt-get update && \
     apt-get install -y \
         build-essential \
-        clang-12 \
+        clang \
         git \
         libopenblas-dev \
         gcc-aarch64-linux-gnu \
@@ -62,8 +62,21 @@ RUN pip install --upgrade pip && \
     poetry install --no-interaction --no-ansi --no-root -v
 
 WORKDIR ${TVM_HOME}
-# RUN mkdir -p build && \
-#     cd       build && \
+RUN mkdir -p build && \
+    cd       build && \
+    cp ../cmake/config.cmake . && \
+    echo "set(USE_LLVM llvm-config-12)" >> config.cmake && \
+    echo "set(USE_LIBBACKTRACE OFF)" >> config.cmake && \
+    echo "set(USE_SORT ON)" >> config.cmake && \
+    echo "set(USE_RPC OFF)" >> config.cmake && \
+    echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
+    echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake && \
+    cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+    make -j $(nproc) && \
+    strip libtvm.so
+
+# RUN mkdir -p build-win && \
+#     cd       build-win && \
 #     cp ../cmake/config.cmake . && \
 #     echo "set(USE_LLVM llvm-config-12)" >> config.cmake && \
 #     echo "set(USE_LIBBACKTRACE OFF)" >> config.cmake && \
@@ -71,28 +84,12 @@ WORKDIR ${TVM_HOME}
 #     echo "set(USE_RPC OFF)" >> config.cmake && \
 #     echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
 #     echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake && \
-#     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
-#     make -j $(nproc) && \
-#     strip libtvm.so
-
-RUN mkdir -p build-win && \
-    cd       build-win && \
-    cp ../cmake/config.cmake . && \
-    echo "set(USE_LLVM llvm-config-12)" >> config.cmake && \
-    echo "set(USE_LIBBACKTRACE OFF)" >> config.cmake && \
-    echo "set(USE_SORT ON)" >> config.cmake && \
-    echo "set(USE_RPC OFF)" >> config.cmake && \
-    echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
-    echo "set(USE_FALLBACK_STL_MAP ON)" >> config.cmake
-    #  && \
-    cmake .. \
-        -DCMAKE_SYSTEM_NAME=Windows \
-        -DCMAKE_C_COMPILER=/usr/bin/x86_64-w64-mingw32-gcc \
-        -DCMAKE_CXX_COMPILER=/usr/bin/x86_64-w64-mingw32-g++ \
-        -DCMAKE_BUILD_TYPE=Release
-    # make -j $(nproc) runtime
-
-RUN update-alternatives 
+#     cmake .. \
+#         -DCMAKE_SYSTEM_NAME=Windows \
+#         -DCMAKE_C_COMPILER=/usr/bin/x86_64-w64-mingw32-gcc \
+#         -DCMAKE_CXX_COMPILER=/usr/bin/x86_64-w64-mingw32-g++ \
+#         -DCMAKE_BUILD_TYPE=Release && \
+#     make -j $(nproc) runtime
 
 
 # Environment variables for CUDA.

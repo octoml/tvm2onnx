@@ -108,11 +108,13 @@ class RelayModel:
         :param host_target: the TVM target host
         :return: a function to be passed to `export_library`
         """
+        from tvm.contrib import cc
         if "aarch64-linux-gnu" in host_target:
             return cc.cross_compiler("aarch64-linux-gnu-gcc")
         elif "armv8l-linux-gnueabihf" in host_target:
             return cc.cross_compiler("arm-linux-gnueabihf-gcc")
-        elif "x86_64-w64-mingw32" in host_target:
+        elif "windows" in host_target:
+            all_options = ["-target", "x86_64-w64-mingw32-gcc", "-O2"]
             return cc.cross_compiler("x86_64-w64-mingw32-gcc")
         else:
             # The above are the only cross-compile targets we currently support.
@@ -153,8 +155,14 @@ class RelayModel:
 
             so_path = tdir_path / "model.dll"
 
+            def linux_to_windows_cross_compile(output, objects, cc="clang", options=None):
+                all_options = ["-target", "x86_64-w64-mingw32-gcc", "-O2"]
+                if options:
+                    all_options += options
+                tvm.contrib.cc.create_shared(output, objects, cc=cc, options=all_options)
+
             # Save module.
-            mod.export_library(str(so_path), shared_object_build_func("x86_64-w64-mingw32"))
+            mod.export_library(str(so_path), fcompile=linux_to_windows_cross_compile("windows"))
 
             tvm_runtime = (
                 pathlib.Path(os.environ["TVM_HOME"]) / "build" / "tvm_runtime.lib"
