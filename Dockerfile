@@ -7,7 +7,7 @@ RUN apt-get update --fix-missing && \
     apt-get update && \
     apt-get install -y \
         build-essential \
-        clang \
+        clang-12 \
         git \
         libopenblas-dev \
         gcc-aarch64-linux-gnu \
