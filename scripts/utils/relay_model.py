@@ -162,7 +162,7 @@ class RelayModel:
                 tvm.contrib.cc.create_shared(output, objects, cc=cc, options=all_options)
 
             # Save module.
-            mod.export_library(str(so_path), fcompile=linux_to_windows_cross_compile("windows"))
+            mod.export_library(str(so_path), fcompile=linux_to_windows_cross_compile)
 
             tvm_runtime = (
                 pathlib.Path(os.environ["TVM_HOME"]) / "build" / "tvm_runtime.lib"
