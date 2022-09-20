@@ -71,6 +71,7 @@ def benchmark(
     input_data["a"] = np.random.randn(*input_shape).astype(dtype)
     input_data["b"] = np.random.randn(*input_shape).astype(dtype)
     input_data["c"] = np.random.randn(*input_shape).astype(dtype)
+    expected = input_data["a"]*input_data["b"]+input_data["c"]
 
     sess_options = onnxruntime.SessionOptions()
     sess_options.register_custom_ops_library(custom_lib)
@@ -88,8 +89,9 @@ def benchmark(
     times = []
     for _ in range(iterations):
         start_time = time.time()
-        _ = session.run(output_names=None, input_feed=input_data)
+        outputs = session.run(output_names=None, input_feed=input_data)
         times.append((time.time() - start_time)*1000)
+        assert np.allclose(outputs[0], expected)
 
     mean = np.mean(times)
     cov = np.cov(times)

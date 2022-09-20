@@ -12,6 +12,7 @@
 #include <regex>
 #include <filesystem>
 #include <memory>
+#include <initializer_list>
 
 #include <dlpack/dlpack.h>
 #include <tvm/runtime/container/adt.h>
@@ -109,7 +110,7 @@ struct TVMRuntime {
     DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
     ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
 
-    {% for details in cookiecutter.initializers -%}
+{% for details in cookiecutter.initializers -%}
     const OrtValue* _{{details.name}} = ort_.KernelContext_GetInput(context, {{details.index}});
     const {{details.cpp_type}}* _{{details.name}}_ptr = ort_.GetTensorData<{{details.cpp_type}}>(_{{details.name}});
     DLDataType _{{details.name}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
@@ -117,8 +118,7 @@ struct TVMRuntime {
     _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     const_map.Set("{{details.base_name}}", _{{details.name}}_ndarray);
 
-    {% endfor %}
-
+{% endfor %}
     // We can't LoadExecutable util we have added late-bound constants so the actual creation
     // of loading takes place here.
     // void Executable::LoadLateBoundConstantsFromMap(Map<String, NDArray> map)
@@ -178,19 +178,18 @@ struct TVMRuntime {
     {% for details in cookiecutter.inputs -%}
     const OrtValue* input{{details.index}} = ort_.KernelContext_GetInput(context, {{details.index}});
     const {{details.cpp_type}}* input{{details.index}}_ptr = ort_.GetTensorData<{{details.cpp_type}}>(input{{details.index}});
-    int64_t input{{details.index}}_shape[] = {{details.shape}};
-    DLDataType input{{details.index}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+    static DLDataType input{{details.index}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
     ::tvm::runtime::NDArray input{{details.index}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, input{{details.index}}_dtype, dl_device_type);
     input{{details.index}}_ndarray.CopyFromBytes(input{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     input_vec.push_back(input{{details.index}}_ndarray);
-    {% endfor %}
 
+    {% endfor %}
     {% for details in cookiecutter.outputs -%}
     int64_t output{{details.index}}_shape[] = {{details.shape}};
     OrtValue* output{{details.index}} = ort_.KernelContext_GetOutput(context, {{details.index}}, output{{details.index}}_shape, {{details.rank}});
     {{details.cpp_type}}* output{{details.index}}_ptr = ort_.GetTensorMutableData<{{details.cpp_type}}>(output{{details.index}});
-    {% endfor %}
 
+    {% endfor %}
     std::vector<tvm::runtime::NDArray> outputs = TVMRun(input_vec);
 
     // Copy result data to ort output tensors
@@ -242,6 +241,28 @@ struct TVMRuntime {
   tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec;
   TempFile model_so_file;
   bool constants_bound = false;
+
+  DLTensor create_dltensor(
+    void* data, std::vector<int64_t>& shape, const DLDevice& dev, const DLDataType& dtype
+  ) {
+    DLTensor tensor;
+    tensor.data = data;
+    tensor.device = dev;
+    tensor.ndim = shape.size();
+    tensor.dtype = dtype;
+    tensor.shape = shape.data();
+    tensor.strides = nullptr;
+    tensor.byte_offset = 0;
+    return tensor;
+  }
+
+  tvm::runtime::NDArray create_ndarray(
+    void* data, std::vector<int64_t>& shape, const DLDevice& dev, const DLDataType& dtype
+  ) {
+    DLTensor tensor = create_dltensor(data, shape, dev, dtype);
+    tvm::runtime::NDArray ndarray = ::tvm::runtime::NDArray::NewFromDLTensor(&tensor, dev);
+    return ndarray;
+  }
 };
 
 struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {

@@ -325,6 +325,7 @@ class ONNXRuntimeTVMPackage:
 
         source = os.path.join(build_dir, "custom_op_library_source")
         target = os.path.join(build_dir)
+        shutil.copy(os.path.join(source, "custom_op_library.cc"), "custom_op.cc") # Remove this
         shutil.move(os.path.join(source, "custom_op_library.cc"), target)
         shutil.move(os.path.join(source, "custom_op_library.h"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
