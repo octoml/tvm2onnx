@@ -26,11 +26,13 @@ LOG = logging.getLogger(__name__)
 
 def get_static_runtime_path() -> pathlib.Path:
     from tvm._ffi.libinfo import find_lib_path
+
     return pathlib.Path(find_lib_path(["libtvm_runtime.a"])[0])
 
 
 def get_tvm_includes() -> typing.List[pathlib.Path]:
     from tvm._ffi.libinfo import find_include_path
+
     return list(map(pathlib.Path, find_include_path()))
 
 

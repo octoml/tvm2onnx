@@ -150,6 +150,7 @@ class ONNXRuntimeTVMPackage:
     def template_dir(self):
         """The template dir to copy and modify for this package job."""
         from . import get_templates_dir
+
         return get_templates_dir()
 
     def cookiecutter_config(
