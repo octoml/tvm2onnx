@@ -1,6 +1,6 @@
 # Makefile to compile an onnxruntime custom op library
 
-FLAGS=-DDMLC_USE_LOGGING_LIBRARY=\<tvm/runtime/logging.h\> -DTVM_USE_LIBBACKTRACE=0
+FLAGS=-DDMLC_USE_LOGGING_LIBRARY=\<tvm/runtime/logging.h\> -DTVM_USE_LIBBACKTRACE=0 -DUSE_FALLBACK_STL_MAP=1
 
 custom_{{cookiecutter.module_name}}.so: custom_op_library.cc
 	g++ \
