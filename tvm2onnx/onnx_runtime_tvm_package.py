@@ -100,6 +100,7 @@ class ONNXRuntimeTVMPackage:
         self,
         model_name: str,
         tvm_runtime_lib: pathlib.Path,
+        includes: typing.List[pathlib.Path],
         tvm_dynamic_libraries: typing.List[str],
         library_search_paths: typing.List[pathlib.Path],
         model_so: pathlib.Path,
@@ -131,6 +132,7 @@ class ONNXRuntimeTVMPackage:
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
+        self._includes = includes
         self._tvm_dynamic_libraries = tvm_dynamic_libraries
         self._library_search_paths = library_search_paths
         self._model_so = model_so
@@ -242,6 +244,7 @@ class ONNXRuntimeTVMPackage:
         return {
             "op_name": "custom_op_library_source",
             "libtvm_runtime_a": str(self._tvm_runtime_lib),
+            "includes": [str(p) for p in self._includes],
             "module_name": self._model_name,
             "custom_op_name": self.custom_op_name,
             "dl_device_type": self._dl_device_type,
