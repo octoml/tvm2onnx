@@ -24,7 +24,6 @@ from onnx.helper import (
     make_tensor_value_info,
 )
 
-import tvm2onnx
 from tvm2onnx.error import PackagingError
 from tvm2onnx.inputs import InputDtypes, InputShapes
 from tvm2onnx.utils import get_path_contents
