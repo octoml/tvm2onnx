@@ -33,7 +33,6 @@ synr = "0.6.0"
 scipy = "^1.4.1"
 
 # Scripts
-onnxruntime = "1.12.1"
 structlog = "^21.2.0"
 
 # Test/Lint

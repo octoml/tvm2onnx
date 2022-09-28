@@ -29,9 +29,6 @@ ENV ORT_HOME="${THIRDPARTY_HOME}/onnxruntime"
 ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
-# Set to ascii to make stdout for subprocess.run in ascii. No funky chars.
-ENV LC_ALL="en_US.ascii"
-
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
 WORKDIR ${THIRDPARTY_HOME}
@@ -42,20 +39,6 @@ RUN git clone \
     cd tvm && \
     git checkout effcd2251b4bb04e47f8ec288b056b0756ea4f4f && \
     git submodule update
-
-WORKDIR ${THIRDPARTY_HOME}
-RUN git clone \
-    -b v1.12.1 \
-    --depth 1 \
-    https://github.com/microsoft/onnxruntime.git
-
-WORKDIR ${TVM2ONNX_HOME}
-COPY pyproject.toml poetry.lock ./
-
-RUN pip install --upgrade pip && \
-    pip install poetry==1.1.15 && \
-    poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi --no-root -v
 
 WORKDIR ${TVM_HOME}
 RUN mkdir -p build && \
@@ -76,6 +59,34 @@ RUN mkdir -p build && \
     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
     make -j $(nproc) && \
     strip libtvm.so
+
+WORKDIR ${TVM2ONNX_HOME}
+COPY pyproject.toml poetry.lock ./
+
+RUN pip install --upgrade pip && \
+    pip install poetry==1.1.15 && \
+    poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi --no-root -v
+
+WORKDIR ${THIRDPARTY_HOME}
+RUN git clone \
+    --recursive \
+    --jobs $(nproc) \
+    -b main \
+    https://github.com/microsoft/onnxruntime.git
+RUN cd onnxruntime && \
+    ./build.sh \
+        # By default build.sh runs with the --update --build --test options.
+        # Directly specifying --build and --update only avoids some lengthy
+        # test builds that we don't need.
+        --update \
+        --build \
+        --use_tvm \
+        --config Release \
+        --skip_tests \
+        --build_wheel \
+        --parallel $(nproc)
+RUN python3 -m pip install ${THIRDPARTY_HOME}/onnxruntime/build/Linux/Release/dist/*.whl
 
 # Environment variables for CUDA.
 ENV PATH=/usr/local/cuda/bin:/usr/local/nvidia/bin:${PATH}
