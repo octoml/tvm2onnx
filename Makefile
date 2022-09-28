@@ -27,6 +27,7 @@ ort:
 		--skip_tests \
 		--build_wheel \
 		--parallel $(nproc)
-	python3 -m pip install /usr/tvm2onnx/3rdparty/onnxruntime/build/Linux/Release/dist/*.whl
+	python3 -m pip uninstall -y /usr/tvm2onnx/3rdparty/onnxruntime/build/Linux/Release/dist/*.whl
+	python3 -m pip install -y /usr/tvm2onnx/3rdparty/onnxruntime/build/Linux/Release/dist/*.whl
 
 .PHONY: format lint test
