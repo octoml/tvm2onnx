@@ -17,4 +17,16 @@ test: # Runs the unit and integration tests.
 test-slow: # Runs the unit and integration tests.
 	pytest --runslow --durations 0 tests
 
+ort:
+	cd /usr/tvm2onnx/3rdparty/onnxruntime && \
+	./build.sh \
+		--update \
+		--build \
+		--use_tvm \
+		--config Release \
+		--skip_tests \
+		--build_wheel \
+		--parallel $(nproc)
+	python3 -m pip install /usr/tvm2onnx/3rdparty/onnxruntime/build/Linux/Release/dist/*.whl
+
 .PHONY: format lint test
