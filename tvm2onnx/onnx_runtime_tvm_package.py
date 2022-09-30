@@ -100,8 +100,6 @@ class ONNXRuntimeTVMPackage:
         self,
         model_name: str,
         tvm_runtime_lib: pathlib.Path,
-        tvm_dynamic_libraries: typing.List[str],
-        library_search_paths: typing.List[pathlib.Path],
         model_so: pathlib.Path,
         model_ro: pathlib.Path,
         constants_map: typing.Dict[str, np.ndarray],
@@ -112,13 +110,13 @@ class ONNXRuntimeTVMPackage:
         dl_device_type: str,
         metadata: typing.Dict[str, str] = {},
         debug_build: bool = False,
+        compiler: str = "g++",
+        compiler_flags: str = "",
     ):
         """Initializes a new package.
 
         :param model_name: the package name
         :param tvm_runtime_lib: the path to the static TVM runtime lib
-        :param tvm_dynamic_libraries: dynamic libraries that the TVM runtime requires
-        :param library_search_paths: additional library search paths
         :param model_so: the path to the compiled model.so
         :param model_ro: the path to the compiled model.ro
         :param constants_map: the map of named constants
@@ -128,11 +126,11 @@ class ONNXRuntimeTVMPackage:
         :param output_dtypes: the output dtypes
         :param dl_device_type: the DLDeviceType
         :param debug_build: whether to generate a debug build
+        :param compiler: the name of the compiler to use
+        :param compiler_flags: additional compiler flags to pass
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
-        self._tvm_dynamic_libraries = tvm_dynamic_libraries
-        self._library_search_paths = library_search_paths
         self._model_so = model_so
         self._model_ro = model_ro
         self._constants_map = constants_map
@@ -143,6 +141,8 @@ class ONNXRuntimeTVMPackage:
         self._dl_device_type = dl_device_type
         self._metadata = metadata
         self._debug_build = debug_build
+        self._compiler = compiler
+        self._compiler_flags = compiler_flags
 
     @property
     def template_dir(self):
@@ -255,9 +255,9 @@ class ONNXRuntimeTVMPackage:
             "outputs": outputs,
             "initializers": initializers,
             "domain": domain,
-            "dynamic_libraries": self._tvm_dynamic_libraries,
-            "library_search_paths": [str(p) for p in self._library_search_paths],
             "debug_build": self._debug_build,
+            "compiler": self._compiler,
+            "compiler_flags": self._compiler_flags,
         }
 
     def _sanitize_io_name(self, name: str) -> str:
