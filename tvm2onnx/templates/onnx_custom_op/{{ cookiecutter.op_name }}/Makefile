@@ -7,10 +7,9 @@ custom_{{cookiecutter.module_name}}.so: custom_op_library.cc
 		-shared \
 		-Iinclude \
 		-I. \
-		-I$(TVM_HOME)/include \
-		-I$(TVM_HOME)/3rdparty/dlpack/include \
-		-I${TVM_HOME}/3rdparty/dmlc-core/include \
-		-I${ORT_HOME}/include \
+		{% for path in cookiecutter.includes -%}
+		-I{{path}} \
+		{% endfor -%}
 		-fPIC \
 		{% if cookiecutter.debug_build -%}
 		-g \

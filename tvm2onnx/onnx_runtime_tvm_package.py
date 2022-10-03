@@ -24,7 +24,6 @@ from onnx.helper import (
     make_tensor_value_info,
 )
 
-import tvm2onnx
 from tvm2onnx.error import PackagingError
 from tvm2onnx.inputs import InputDtypes, InputShapes
 from tvm2onnx.utils import get_path_contents
@@ -100,6 +99,7 @@ class ONNXRuntimeTVMPackage:
         self,
         model_name: str,
         tvm_runtime_lib: pathlib.Path,
+        includes: typing.List[pathlib.Path],
         model_so: pathlib.Path,
         model_ro: pathlib.Path,
         constants_map: typing.Dict[str, np.ndarray],
@@ -131,6 +131,7 @@ class ONNXRuntimeTVMPackage:
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
+        self._includes = includes
         self._model_so = model_so
         self._model_ro = model_ro
         self._constants_map = constants_map
@@ -147,7 +148,9 @@ class ONNXRuntimeTVMPackage:
     @property
     def template_dir(self):
         """The template dir to copy and modify for this package job."""
-        return pathlib.Path(tvm2onnx.__file__).parent / "templates" / "onnx_custom_op"
+        from . import get_templates_dir
+
+        return get_templates_dir()
 
     def cookiecutter_config(
         self,
@@ -241,6 +244,7 @@ class ONNXRuntimeTVMPackage:
         return {
             "op_name": "custom_op_library_source",
             "libtvm_runtime_a": str(self._tvm_runtime_lib),
+            "includes": [str(p) for p in self._includes],
             "module_name": self._model_name,
             "custom_op_name": self.custom_op_name,
             "dl_device_type": self._dl_device_type,

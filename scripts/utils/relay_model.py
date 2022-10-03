@@ -24,6 +24,22 @@ from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
 LOG = logging.getLogger(__name__)
 
 
+def get_static_runtime_path() -> pathlib.Path:
+    from tvm._ffi.libinfo import find_lib_path
+
+    return pathlib.Path(find_lib_path(["libtvm_runtime.a"])[0])
+
+
+def get_tvm_includes() -> typing.List[pathlib.Path]:
+    from tvm._ffi.libinfo import find_include_path
+
+    return list(map(pathlib.Path, find_include_path()))
+
+
+def get_ort_includes() -> pathlib.Path:
+    return pathlib.Path(os.path.join(os.environ["ORT_HOME"], "include"))
+
+
 class RelayTensorDetail(typing.NamedTuple):
     """Details of a tensor"""
 
@@ -140,13 +156,14 @@ class RelayModel:
             # Save module.
             mod.export_library(str(so_path))
 
-            libtvm_runtime_a = (
-                pathlib.Path(os.environ["TVM_HOME"]) / "build" / "libtvm_runtime.a"
-            )
+            libtvm_runtime_a = get_static_runtime_path()
+            tvm_includes = get_tvm_includes()
+            ort_includes = get_ort_includes()
             outputs = self.get_outputs()
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
                 tvm_runtime_lib=libtvm_runtime_a,
+                includes=tvm_includes + [ort_includes],
                 model_so=so_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
