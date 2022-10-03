@@ -73,8 +73,8 @@ RUN git clone \
     --recursive \
     --jobs $(nproc) \
     -b bob/tvmep \
-    https://github.com/microsoft/onnxruntime.git
-RUN cd onnxruntime && \
+    https://github.com/rkimball/onnxruntime.git && \
+    cd onnxruntime && \
     ./build.sh \
         # By default build.sh runs with the --update --build --test options.
         # Directly specifying --build and --update only avoids some lengthy
