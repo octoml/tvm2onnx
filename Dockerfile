@@ -72,7 +72,7 @@ WORKDIR ${THIRDPARTY_HOME}
 RUN git clone \
     --recursive \
     --jobs $(nproc) \
-    -b main \
+    -b bob/tvmep \
     https://github.com/microsoft/onnxruntime.git
 RUN cd onnxruntime && \
     ./build.sh \
