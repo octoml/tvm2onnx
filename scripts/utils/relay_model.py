@@ -163,11 +163,6 @@ class RelayModel:
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
                 tvm_runtime_lib=libtvm_runtime_a,
-                includes=tvm_includes + [ort_includes],
-                tvm_dynamic_libraries=["pthread", "cuda", "cudart"]
-                if "cuda" in tvm_target
-                else ["pthread"],
-                library_search_paths=[],
                 model_so=so_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
@@ -178,6 +173,9 @@ class RelayModel:
                 dl_device_type="kDLCUDA" if "cuda" in tvm_target else "kDLCPU",
                 metadata=metadata,
                 debug_build=debug_build,
+                compiler_flags="-lpthread -lcuda -lcudart"
+                if "cuda" in tvm_target
+                else "-lpthread",
             )
             onnx_tar = packager.build_package(tdir_path)
             shutil.move(str(onnx_tar), str(output_path))
