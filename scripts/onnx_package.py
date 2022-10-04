@@ -8,7 +8,6 @@ import logging
 import pathlib
 
 import onnx
-
 from utils.relay_model import RelayModel
 from utils.setup_logging import setup_logging
 
