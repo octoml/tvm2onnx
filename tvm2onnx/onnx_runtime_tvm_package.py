@@ -99,7 +99,6 @@ class ONNXRuntimeTVMPackage:
         self,
         model_name: str,
         tvm_runtime_lib: pathlib.Path,
-        includes: typing.List[pathlib.Path],
         model_so: pathlib.Path,
         model_ro: pathlib.Path,
         constants_map: typing.Dict[str, np.ndarray],
@@ -109,7 +108,6 @@ class ONNXRuntimeTVMPackage:
         output_dtypes: InputDtypes,
         dl_device_type: str,
         metadata: typing.Dict[str, str] = {},
-        debug_build: bool = False,
         compiler: str = "g++",
         compiler_flags: str = "",
     ):
@@ -125,13 +123,11 @@ class ONNXRuntimeTVMPackage:
         :param output_shapes: the output shapes
         :param output_dtypes: the output dtypes
         :param dl_device_type: the DLDeviceType
-        :param debug_build: whether to generate a debug build
         :param compiler: the name of the compiler to use
         :param compiler_flags: additional compiler flags to pass
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
-        self._includes = includes
         self._model_so = model_so
         self._model_ro = model_ro
         self._constants_map = constants_map
@@ -141,7 +137,6 @@ class ONNXRuntimeTVMPackage:
         self._output_dtypes = output_dtypes
         self._dl_device_type = dl_device_type
         self._metadata = metadata
-        self._debug_build = debug_build
         self._compiler = compiler
         self._compiler_flags = compiler_flags
 
@@ -244,7 +239,6 @@ class ONNXRuntimeTVMPackage:
         return {
             "op_name": "custom_op_library_source",
             "libtvm_runtime_a": str(self._tvm_runtime_lib),
-            "includes": [str(p) for p in self._includes],
             "module_name": self._model_name,
             "custom_op_name": self.custom_op_name,
             "dl_device_type": self._dl_device_type,
@@ -259,7 +253,6 @@ class ONNXRuntimeTVMPackage:
             "outputs": outputs,
             "initializers": initializers,
             "domain": domain,
-            "debug_build": self._debug_build,
             "compiler": self._compiler,
             "compiler_flags": self._compiler_flags,
         }

@@ -36,8 +36,8 @@ def get_tvm_includes() -> typing.List[pathlib.Path]:
     return list(map(pathlib.Path, find_include_path()))
 
 
-def get_ort_includes() -> pathlib.Path:
-    return pathlib.Path(os.path.join(os.environ["ORT_HOME"], "include"))
+def get_ort_includes() -> typing.List[pathlib.Path]:
+    return [pathlib.Path(os.path.join(os.environ["ORT_HOME"], "include"))]
 
 
 class RelayTensorDetail(typing.NamedTuple):
@@ -157,13 +157,23 @@ class RelayModel:
             mod.export_library(str(so_path))
 
             libtvm_runtime_a = get_static_runtime_path()
-            tvm_includes = get_tvm_includes()
-            ort_includes = get_ort_includes()
             outputs = self.get_outputs()
+
+            compiler_flags = [
+                f"-I{include}" for include in get_tvm_includes() + get_ort_includes()
+            ]
+            compiler_flags.append("-lpthread")
+            if "cuda" in tvm_target:
+                compiler_flags.append("-lcuda")
+                compiler_flags.append("-lcudart")
+
+            if debug_build:
+                compiler_flags.append("-g")
+                compiler_flags.append("-O0")
+
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
                 tvm_runtime_lib=libtvm_runtime_a,
-                includes=tvm_includes + [ort_includes],
                 model_so=so_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
@@ -173,10 +183,7 @@ class RelayModel:
                 output_dtypes={t.name: t.dtype for t in outputs},
                 dl_device_type="kDLCUDA" if "cuda" in tvm_target else "kDLCPU",
                 metadata=metadata,
-                debug_build=debug_build,
-                compiler_flags="-lpthread -lcuda -lcudart"
-                if "cuda" in tvm_target
-                else "-lpthread",
+                compiler_flags=" ".join(compiler_flags),
             )
             onnx_tar = packager.build_package(tdir_path)
             shutil.move(str(onnx_tar), str(output_path))

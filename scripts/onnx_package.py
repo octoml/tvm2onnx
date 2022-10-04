@@ -9,8 +9,8 @@ import pathlib
 
 import onnx
 
-from scripts.utils.relay_model import RelayModel
-from scripts.utils.setup_logging import setup_logging
+from utils.relay_model import RelayModel
+from utils.setup_logging import setup_logging
 
 logging.basicConfig(level=logging.DEBUG)
 
