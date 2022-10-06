@@ -257,17 +257,6 @@ class ONNXRuntimeTVMPackage:
             "compiler_flags": self._compiler_flags,
         }
 
-    def _sanitize_io_name(self, name: str) -> str:
-        """Strip trailing ":<NUMBER>" from names
-
-        :param name: the input/output name to sanitize
-        :return: sanitized name
-        """
-        colon_index = name.rfind(":")
-        if colon_index > 0:
-            name = name[:colon_index]
-        return name
-
     def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
         """Exports the relay model as an onnx model where the relay model is
         represented as a single onnx custom operator. Constants are exported as
@@ -286,24 +275,20 @@ class ONNXRuntimeTVMPackage:
         domain = "octoml.ai"
 
         for name in self._input_dtypes.keys():
-            sanitized_name = self._sanitize_io_name(name)
             shape = self._input_shapes[name]
             dtype = self._input_dtypes[name]
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
-            tensor = make_tensor_value_info(sanitized_name, tensortype, shape)
+            tensor = make_tensor_value_info(name, tensortype, shape)
             input_tensors.append(tensor)
-            custom_op_input_names.append(sanitized_name)
+            custom_op_input_names.append(name)
 
         for name in self._output_dtypes.keys():
-            sanitized_name = self._sanitize_io_name(name)
             tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
                 np.dtype(self._output_dtypes[name])
             ]
-            tensor = make_tensor_value_info(
-                sanitized_name, tensortype, self._output_shapes[name]
-            )
+            tensor = make_tensor_value_info(name, tensortype, self._output_shapes[name])
             output_tensors.append(tensor)
-            output_names.append(sanitized_name)
+            output_names.append(name)
 
         for name, np_data in self._constants_map.items():
             tvm_constant_names.append(name)

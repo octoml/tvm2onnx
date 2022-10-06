@@ -110,7 +110,7 @@ def test_models_in_models_dir(model_name):
             )
         else:
             onnx_proto = load_model(model_path)
-        relay_model = RelayModel.from_onnx(onnx_proto)
+        relay_model = RelayModel.from_onnx(onnx_proto, dynamic_axis_substitute=1)
         for name, shape in relay_model.input_shapes.items():
             print(f"input {name}, shape {shape}")
         with tempfile.TemporaryDirectory() as tdir:
