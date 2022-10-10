@@ -7,6 +7,8 @@
 #include "onnxruntime/core/common/common.h"
 
 #include <vector>
+#include <string>
+#include <unordered_map>
 #include <cmath>
 #include <mutex>
 #include <iostream>
@@ -142,6 +144,23 @@ struct TVMRuntime {
     run_func = vm.GetFunction("invoke", nullptr);
   }
 
+  DLDataType GetDataType(const std::string& type) {
+    // TODO(vvchernov): support float16 -> {kDLFloat, 16, 1}
+    static std::unordered_map<std::string, DLDataType> cppTypeToDLType = {
+      {"float": DLDataType{kDLFloat, 32, 1}},
+      {"double": DLDataType{kDLFloat, 64, 1}},
+      {"int8_t": {kDLInt, 8, 1}},
+      {"int": {kDLInt, 32, 1}},
+      {"int64_t": {kDLInt, 64, 1}},
+      {"bool": {kDLUInt, 1, 1}}
+    };
+    if(!cppTypeToDLType.count(type)) {
+      // TODO(vvchernov): implement with ORT or TVM check API
+      throw std::logic_error("Unsupported data type");
+    }
+    return cppTypeToDLType[type];
+  }
+
   void Compute(OrtKernelContext* context) {
     Ort::KernelContext ctx(context);
     // Get data points for the input data
@@ -165,22 +184,37 @@ struct TVMRuntime {
     input_vec.push_back(input{{details.index}}_ndarray);
     {% endfor %}
 
+    std::vector<DLTensor> ort_dl_outputs;
+    Ort::KernelContext ctx(context);
     {% for details in cookiecutter.outputs -%}
     std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
     auto output{{details.index}} = ctx.GetOutput({{details.index}}, output{{details.index}}_shape);
-    {{details.cpp_type}}* output{{details.index}}_ptr = output{{details.index}}.GetTensorMutableData<{{details.cpp_type}}>();
+    // TODO(vvchernov): check output{{details.index}}->IsTensor()
+    DLTensor dl_output{{details.index}};
+    dl_output{{details.index}}.device = dl_device_type;
+    dl_output{{details.index}}.dtype = GetDataType("{{details.cpp_type}}");
+    dl_output{{details.index}}.data = output{{details.index}}.GetTensorMutableRawData();
+    ort_dl_outputs.emplace_back(dl_output{{details.index}});
     {% endfor %}
 
-    std::vector<tvm::runtime::NDArray> outputs = TVMRun(input_vec);
+    size_t num_total_args = ort_dl_outputs.size() + 1;
+    std::vector<TVMValue> tvm_values(num_total_args);
+    std::vector<int> tvm_type_codes(num_total_args);
+    tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
+    const std::string func_name = "main";
+    setter(0, func_name.c_str());
+    for (size_t k = 0; k < num_total_args - 1; ++k) {
+      setter(k+1, &ort_dl_outputs[k]);
+    }
 
-    // Copy result data to ort output tensors
-    {% for details in cookiecutter.outputs -%}
-    outputs[{{details.index}}].CopyToBytes(output{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
-    {% endfor %}
+    tvm::runtime::PackedFunc set_output = exec_mod.GetFunction("set_outputs", false);
+    tvm::runtime::TVMRetValue rv;
+    set_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
+
+    TVMRun(input_vec);
   }
 
-  std::vector<tvm::runtime::NDArray>
-  TVMRun(const std::vector<tvm::runtime::NDArray>& input_vec)
+  void TVMRun(const std::vector<tvm::runtime::NDArray>& input_vec)
   {
     // arity is num of inputs + 1, because first argument to the set_input_func
     // is the name of the function that should take those inputs.
@@ -197,19 +231,7 @@ struct TVMRuntime {
     set_input_func.CallPacked(
         tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
 
-    tvm::runtime::ObjectRef out = run_func("main");
-    std::vector<tvm::runtime::NDArray> outputs;
-    if (out.as<tvm::runtime::ADTObj>()) {
-      auto adt = tvm::Downcast<tvm::runtime::ADT>(out);
-      for (size_t i = 0; i < adt.size(); ++i) {
-        tvm::runtime::NDArray arr = tvm::Downcast<tvm::runtime::NDArray>(adt[i]);
-        outputs.push_back(arr);
-      }
-    } else {
-      tvm::runtime::NDArray arr = tvm::Downcast<tvm::runtime::NDArray>(out);
-      outputs.push_back(arr);
-    }
-    return outputs;
+    run_func("main");
   }
 
  private:
