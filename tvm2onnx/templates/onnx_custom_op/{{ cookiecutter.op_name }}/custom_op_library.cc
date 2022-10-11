@@ -370,15 +370,15 @@ struct TVMRuntime {
     runner = GetRunner(ort_, std::move(funcs), use_zero_copy);
   }
 
-  DLDataType GetDataType(const std::string& type) {
+  static DLDataType GetDataType(const std::string& type) {
     // TODO(vvchernov): support float16 -> {kDLFloat, 16, 1}
     static std::unordered_map<std::string, DLDataType> cppTypeToDLType = {
-      {"float": DLDataType{kDLFloat, 32, 1}},
-      {"double": DLDataType{kDLFloat, 64, 1}},
-      {"int8_t": {kDLInt, 8, 1}},
-      {"int": {kDLInt, 32, 1}},
-      {"int64_t": {kDLInt, 64, 1}},
-      {"bool": {kDLUInt, 1, 1}}
+      {"float", DLDataType{kDLFloat, 32, 1}},
+      {"double", DLDataType{kDLFloat, 64, 1}},
+      {"int8_t", {kDLInt, 8, 1}},
+      {"int", {kDLInt, 32, 1}},
+      {"int64_t", {kDLInt, 64, 1}},
+      {"bool", {kDLUInt, 1, 1}}
     };
     if(!cppTypeToDLType.count(type)) {
       // TODO(vvchernov): implement with ORT or TVM check API
@@ -399,19 +399,40 @@ struct TVMRuntime {
       constants_bound = true;
     }
 
-    std::vector<tvm::runtime::NDArray> input_vec;
+    Ort::KernelContext ctx(context);
+    std::vector<DLTensor> ort_dl_inputs;
     {% for details in cookiecutter.inputs -%}
-    auto input{{details.index}} = ctx.GetInput({{details.index}});
-    const {{details.cpp_type}}* input{{details.index}}_ptr = input{{details.index}}.GetTensorData<{{details.cpp_type}}>();
-    int64_t input{{details.index}}_shape[] = {{details.shape}};
-    DLDataType input{{details.index}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
-    ::tvm::runtime::NDArray input{{details.index}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, input{{details.index}}_dtype, dl_device_type);
-    input{{details.index}}_ndarray.CopyFromBytes(input{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
-    input_vec.push_back(input{{details.index}}_ndarray);
+    auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
+    std::vector<int64_t> input{{details.index}}_shape = {{details.shape}};
+
+    DLTensor dl_input{{details.index}};
+    // TODO(vvchernov): device?
+    // auto ort_device_type = input_tensor{{details.index}}.GetTensorMemoryInfo().GetDeviceType();
+    dl_input{{details.index}}.device = dl_device_type;
+    dl_input{{details.index}}.dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+    dl_input{{details.index}}.strides = nullptr;
+    dl_input{{details.index}}.byte_offset = 0;
+    dl_input{{details.index}}.data = input_tensor{{details.index}}.GetTensorMutableRawData();
+    dl_input{{details.index}}.ndim = {{details.rank}};
+    dl_input{{details.index}}.shape = input{{details.index}}_shape.data();
+    ort_dl_inputs.emplace_back(dl_input{{details.index}});
     {% endfor %}
 
+    size_t num_total_iargs = ort_dl_inputs.size() + 1;
+    std::vector<TVMValue> tvm_in_values(num_total_iargs);
+    std::vector<int> tvm_in_type_codes(num_total_iargs);
+    tvm::runtime::TVMArgsSetter isetter(tvm_in_values.data(), tvm_in_type_codes.data());
+    const std::string func_name = "main";
+    isetter(0, func_name.c_str());
+    for (size_t k = 0; k < num_total_iargs - 1; ++k) {
+      isetter(k+1, &ort_dl_inputs[k]);
+    }
+
+    tvm::runtime::TVMRetValue rv;
+    set_input_func.CallPacked(
+        tvm::runtime::TVMArgs(tvm_in_values.data(), tvm_in_type_codes.data(), int(num_total_iargs)), &rv);
+
     std::vector<DLTensor> ort_dl_outputs;
-    Ort::KernelContext ctx(context);
     {% for details in cookiecutter.outputs -%}
     std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
     auto output{{details.index}} = ctx.GetOutput({{details.index}}, output{{details.index}}_shape);
@@ -420,6 +441,8 @@ struct TVMRuntime {
     dl_output{{details.index}}.device = dl_device_type;
     dl_output{{details.index}}.dtype = GetDataType("{{details.cpp_type}}");
     dl_output{{details.index}}.data = output{{details.index}}.GetTensorMutableRawData();
+    dl_output{{details.index}}.ndim = {{details.rank}};
+    dl_output{{details.index}}.shape = output{{details.index}}_shape.data();
     ort_dl_outputs.emplace_back(dl_output{{details.index}});
     {% endfor %}
 
@@ -437,26 +460,11 @@ struct TVMRuntime {
     tvm::runtime::TVMRetValue rv;
     set_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
 
-    TVMRun(input_vec);
+    TVMRun();
   }
 
-  void TVMRun(const std::vector<tvm::runtime::NDArray>& input_vec)
+  void TVMRun()
   {
-    // arity is num of inputs + 1, because first argument to the set_input_func
-    // is the name of the function that should take those inputs.
-    size_t arity = input_vec.size() + 1;
-    std::vector<TVMValue> values(arity);
-    std::vector<int> codes(arity);
-    tvm::runtime::TVMArgsSetter setter(values.data(), codes.data());
-    setter(0, "main");
-    for (size_t i = 1; i < arity; i++) {
-      setter(i, input_vec.at(i - 1));
-    }
-
-    tvm::runtime::TVMRetValue rv;
-    set_input_func.CallPacked(
-        tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
-
     run_func("main");
   }
 
