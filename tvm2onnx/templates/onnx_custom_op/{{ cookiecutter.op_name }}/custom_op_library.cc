@@ -384,15 +384,7 @@ struct TVMRuntime {
     return cppTypeToDLType[type];
   }
 
-  void Compute(OrtKernelContext* context) {
-    Ort::KernelContext ctx(context);
-    if (!constants_bound) {
-      // During the first iteration we need to bind the late-bound constants to TVM and
-      // create the VM. This is our first opportunity to access the onnx external constants.
-      LateBoundConstants(ctx);
-      constants_bound = true;
-    }
-
+  std::vector<DLTensor> GetInputDLTensors(const Ort::KernelContext& ctx) {
     std::vector<DLTensor> ort_dl_inputs;
     {% for details in cookiecutter.inputs -%}
     auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
@@ -410,20 +402,36 @@ struct TVMRuntime {
     dl_input{{details.index}}.shape = input{{details.index}}_shape.data();
     ort_dl_inputs.emplace_back(dl_input{{details.index}});
     {% endfor %}
+    return ort_dl_inputs;
+  }
 
-    size_t num_total_iargs = ort_dl_inputs.size() + 1;
-    std::vector<TVMValue> tvm_in_values(num_total_iargs);
-    std::vector<int> tvm_in_type_codes(num_total_iargs);
-    tvm::runtime::TVMArgsSetter isetter(tvm_in_values.data(), tvm_in_type_codes.data());
+  void SetInputTensors(const std::vector<DLTensor>& ort_dl_inputs) {
+    size_t num_total_args = ort_dl_inputs.size() + 1;
+    std::vector<TVMValue> tvm_in_values(num_total_args);
+    std::vector<int> tvm_in_type_codes(num_total_args);
+    tvm::runtime::TVMArgsSetter setter(tvm_in_values.data(), tvm_in_type_codes.data());
     const std::string func_name = "main";
-    isetter(0, func_name.c_str());
-    for (size_t k = 0; k < num_total_iargs - 1; ++k) {
-      isetter(k+1, &ort_dl_inputs[k]);
+    setter(0, func_name.c_str());
+    for (size_t k = 0; k < num_total_args - 1; ++k) {
+      setter(k+1, &ort_dl_inputs[k]);
     }
 
-    tvm::runtime::TVMRetValue irv;
+    tvm::runtime::TVMRetValue rv;
     set_input_func.CallPacked(
-        tvm::runtime::TVMArgs(tvm_in_values.data(), tvm_in_type_codes.data(), int(num_total_iargs)), &irv);
+        tvm::runtime::TVMArgs(tvm_in_values.data(), tvm_in_type_codes.data(), int(num_total_args)), &rv);
+  }
+
+  void Compute(OrtKernelContext* context) {
+    Ort::KernelContext ctx(context);
+    if (!constants_bound) {
+      // During the first iteration we need to bind the late-bound constants to TVM and
+      // create the VM. This is our first opportunity to access the onnx external constants.
+      LateBoundConstants(ctx);
+      constants_bound = true;
+    }
+
+    std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(ctx);
+    SetInputTensors(ort_dl_inputs);
 
     std::vector<DLTensor> ort_dl_outputs;
     {% for details in cookiecutter.outputs -%}
