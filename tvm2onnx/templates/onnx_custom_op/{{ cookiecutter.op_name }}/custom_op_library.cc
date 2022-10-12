@@ -182,10 +182,10 @@ struct TVMRuntime {
     return cppTypeToDLType[type];
   }
 
-  std::vector<DLTensor> GetInputDLTensors(const Ort::KernelContext& ctx) {
+  std::vector<DLTensor> GetInputDLTensors(OrtKernelContext* context) {
     std::vector<DLTensor> ort_dl_inputs;
     {% for details in cookiecutter.inputs -%}
-    auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
+    auto* input_tensor{{details.index}} = ort_.KernelContext_GetInput(context, {{details.index}});
     int64_t input{{details.index}}_shape[] = {{details.shape}};
 
     DLTensor dl_input{{details.index}};
@@ -195,7 +195,7 @@ struct TVMRuntime {
     dl_input{{details.index}}.dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
     dl_input{{details.index}}.strides = nullptr;
     dl_input{{details.index}}.byte_offset = 0;
-    dl_input{{details.index}}.data = const_cast<void*>(input_tensor{{details.index}}.GetTensorRawData());
+    dl_input{{details.index}}.data = const_cast<void*>(ort_.GetTensorData<void>(input_tensor{{details.index}}));
     dl_input{{details.index}}.ndim = {{details.rank}};
     dl_input{{details.index}}.shape = input{{details.index}}_shape;
     ort_dl_inputs.emplace_back(dl_input{{details.index}});
@@ -203,12 +203,11 @@ struct TVMRuntime {
     return ort_dl_inputs;
   }
 
-  void SetInputTensors(const std::vector<DLTensor>& ort_dl_inputs) {
+  void SetInputTensors(std::vector<DLTensor>& ort_dl_inputs, const std::string& func_name) {
     size_t num_total_args = ort_dl_inputs.size() + 1;
     std::vector<TVMValue> tvm_in_values(num_total_args);
     std::vector<int> tvm_in_type_codes(num_total_args);
     tvm::runtime::TVMArgsSetter setter(tvm_in_values.data(), tvm_in_type_codes.data());
-    const std::string func_name = "main";
     setter(0, func_name.c_str());
     for (size_t k = 0; k < num_total_args - 1; ++k) {
       setter(k+1, &ort_dl_inputs[k]);
@@ -219,16 +218,16 @@ struct TVMRuntime {
         tvm::runtime::TVMArgs(tvm_in_values.data(), tvm_in_type_codes.data(), int(num_total_args)), &rv);
   }
 
-  std::vector<DLTensor> GetOutputDLTensors(const Ort::KernelContext& ctx) {
+  std::vector<DLTensor> GetOutputDLTensors(OrtKernelContext* context) {
     std::vector<DLTensor> ort_dl_outputs;
     {% for details in cookiecutter.outputs -%}
     int64_t output{{details.index}}_shape[] = {{details.shape}};
-    auto output{{details.index}} = ctx.GetOutput({{details.index}}, output{{details.index}}_shape, {{details.rank}});
+    auto* output{{details.index}} = ort_.KernelContext_GetOutput(context, {{details.index}}, output{{details.index}}_shape, {{details.rank}});
     // TODO(vvchernov): check output{{details.index}}->IsTensor()
     DLTensor dl_output{{details.index}};
     dl_output{{details.index}}.device = dl_device_type;
     dl_output{{details.index}}.dtype = GetDataType("{{details.cpp_type}}");
-    dl_output{{details.index}}.data = output{{details.index}}.GetTensorMutableRawData();
+    dl_output{{details.index}}.data = ort_.GetTensorMutableData<void>(output{{details.index}});
     dl_output{{details.index}}.ndim = {{details.rank}};
     dl_output{{details.index}}.shape = output{{details.index}}_shape;
     ort_dl_outputs.emplace_back(dl_output{{details.index}});
@@ -236,12 +235,11 @@ struct TVMRuntime {
     return ort_dl_outputs;
   }
 
-  void LinkOutputTensors(const std::vector<DLTensor>& ort_dl_outputs) {
+  void LinkOutputTensors(std::vector<DLTensor>& ort_dl_outputs, const std::string func_name) {
     size_t num_total_args = ort_dl_outputs.size() + 1;
     std::vector<TVMValue> tvm_values(num_total_args);
     std::vector<int> tvm_type_codes(num_total_args);
     tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
-    const std::string func_name = "main";
     setter(0, func_name.c_str());
     for (size_t k = 0; k < num_total_args - 1; ++k) {
       setter(k+1, &ort_dl_outputs[k]);
@@ -258,16 +256,18 @@ struct TVMRuntime {
       LateBoundConstants(context);
       constants_bound = true;
     }
+    const std::string func_name = "main";
 
-    Ort::KernelContext ctx(context);
-    std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(ctx);
-    SetInputTensors(ort_dl_inputs);
+    // TODO(agladyshev): after PR#13215 we should use Ort::KernelContext
+    // Ort::KernelContext ctx(context);
+    std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(context);
+    SetInputTensors(ort_dl_inputs, func_name);
 
-    std::vector<DLTensor> ort_dl_outputs = GetOutputDLTensors(ctx);
-    LinkOutputTensors(ort_dl_inputs);
+    std::vector<DLTensor> ort_dl_outputs = GetOutputDLTensors(context);
+    LinkOutputTensors(ort_dl_inputs, func_name);
 
     // Inference
-    run_func("main");
+    run_func(func_name);
   }
 
  private:
