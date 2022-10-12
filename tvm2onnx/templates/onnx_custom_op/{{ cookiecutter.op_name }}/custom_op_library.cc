@@ -87,7 +87,6 @@ struct TVMRuntime {
   }
 
   void LateBoundConstants(const Ort::KernelContext& ctx) {
-    DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
     tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
 
     // TODO(vvchernov): double RAM consumption?
@@ -199,19 +198,7 @@ struct TVMRuntime {
         tvm::runtime::TVMArgs(tvm_in_values.data(), tvm_in_type_codes.data(), int(num_total_args)), &rv);
   }
 
-  void Compute(OrtKernelContext* context) {
-    Ort::KernelContext ctx(context);
-
-    if (!constants_bound) {
-      // During the first iteration we need to bind the late-bound constants to TVM and
-      // create the VM. This is our first opportunity to access the onnx external constants.
-      LateBoundConstants(ctx);
-      constants_bound = true;
-    }
-
-    std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(ctx);
-    SetInputTensors(ort_dl_inputs);
-
+  std::vector<DLTensor> GetOutputDLTensors(const Ort::KernelContext& ctx) {
     std::vector<DLTensor> ort_dl_outputs;
     {% for details in cookiecutter.outputs -%}
     std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
@@ -225,7 +212,10 @@ struct TVMRuntime {
     dl_output{{details.index}}.shape = output{{details.index}}_shape.data();
     ort_dl_outputs.emplace_back(dl_output{{details.index}});
     {% endfor %}
+    return ort_dl_outputs;
+  }
 
+  void LinkOutputTensors(const std::vector<DLTensor>& ort_dl_outputs) {
     size_t num_total_args = ort_dl_outputs.size() + 1;
     std::vector<TVMValue> tvm_values(num_total_args);
     std::vector<int> tvm_type_codes(num_total_args);
@@ -238,6 +228,22 @@ struct TVMRuntime {
 
     tvm::runtime::TVMRetValue rv;
     set_outputs_func.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
+  }
+
+  void Compute(OrtKernelContext* context) {
+    Ort::KernelContext ctx(context);
+    if (!constants_bound) {
+      // During the first iteration we need to bind the late-bound constants to TVM and
+      // create the VM. This is our first opportunity to access the onnx external constants.
+      LateBoundConstants(ctx);
+      constants_bound = true;
+    }
+
+    std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(ctx);
+    SetInputTensors(ort_dl_inputs);
+
+    std::vector<DLTensor> ort_dl_outputs = GetOutputDLTensors(ctx);
+    LinkOutputTensors(ort_dl_outputs);
 
     // Inference
     run_func("main");
