@@ -29,6 +29,26 @@ extern const char model_so_end[] asm("_binary_model_so_end");
 namespace {
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
+static ONNXTensorElementDataType GetInputType(size_t index) {
+  static ONNXTensorElementDataType input_types[] = {
+    {% for input_type in cookiecutter.input_types -%}
+    {{input_type}},
+    {% endfor %}
+  };
+
+  return input_types[index];
+};
+
+static ONNXTensorElementDataType GetOutputType(size_t index) const {
+  static ONNXTensorElementDataType output_types[] = {
+    {% for output_type in cookiecutter.output_types -%}
+    {{output_type}},
+    {% endfor %}
+  };
+
+  return output_types[index];
+};
+
 struct OrtCustomOpDomainDeleter {
   explicit OrtCustomOpDomainDeleter(const OrtApi* ort_api) {
     ort_api_ = ort_api;
@@ -165,21 +185,21 @@ struct TVMRuntime {
     run_func = vm.GetFunction("invoke", nullptr);
   }
 
-  static DLDataType GetDataType(const std::string& type) {
-    // TODO(vvchernov): support float16 -> {kDLFloat, 16, 1}
-    static std::unordered_map<std::string, DLDataType> cppTypeToDLType = {
-      {"float", DLDataType{kDLFloat, 32, 1}},
-      {"double", DLDataType{kDLFloat, 64, 1}},
-      {"int8_t", {kDLInt, 8, 1}},
-      {"int", {kDLInt, 32, 1}},
-      {"int64_t", {kDLInt, 64, 1}},
-      {"bool", {kDLUInt, 1, 1}}
+  static DLDataType GetDataType(const ONNXTensorElementDataType& type) {
+    static std::unordered_map<ONNXTensorElementDataType, DLDataType> ortTypeToDLType = {
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16, DLDataType{kDLFloat, 16, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, DLDataType{kDLFloat, 32, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE, DLDataType{kDLFloat, 64, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8, DLDataType{kDLInt, 8, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32, DLDataType{kDLInt, 32, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, DLDataType{kDLInt, 64, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL, DLDataType{kDLUInt, 1, 1}}
     };
-    if(!cppTypeToDLType.count(type)) {
+    if(!ortTypeToDLType.count(type)) {
       // TODO(vvchernov): implement with ORT or TVM check API
       throw std::logic_error("Unsupported data type");
     }
-    return cppTypeToDLType[type];
+    return ortTypeToDLType[type];
   }
 
   std::vector<DLTensor> GetInputDLTensors(OrtKernelContext* context) {
@@ -192,7 +212,7 @@ struct TVMRuntime {
     // TODO(vvchernov): device?
     // auto ort_device_type = input_tensor{{details.index}}.GetTensorMemoryInfo().GetDeviceType();
     dl_input{{details.index}}.device = dl_device_type;
-    dl_input{{details.index}}.dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+    dl_input{{details.index}}.dtype = GetDataType(::GetInputType({{details.index}}));
     dl_input{{details.index}}.strides = nullptr;
     dl_input{{details.index}}.byte_offset = 0;
     dl_input{{details.index}}.data = const_cast<void*>(ort_.GetTensorData<void>(input_tensor{{details.index}}));
@@ -226,7 +246,7 @@ struct TVMRuntime {
     // TODO(vvchernov): check output{{details.index}}->IsTensor()
     DLTensor dl_output{{details.index}};
     dl_output{{details.index}}.device = dl_device_type;
-    dl_output{{details.index}}.dtype = GetDataType("{{details.cpp_type}}");
+    dl_output{{details.index}}.dtype = GetDataType(::GetOutputType({{details.index}}));
     dl_output{{details.index}}.data = ort_.GetTensorMutableData<void>(output{{details.index}});
     dl_output{{details.index}}.ndim = {{details.rank}};
     dl_output{{details.index}}.shape = output{{details.index}}_shape;
@@ -297,24 +317,12 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
 
   size_t GetInputTypeCount() const { return {{cookiecutter.input_count}} + {{cookiecutter.initializer_count}}; };
   ONNXTensorElementDataType GetInputType(size_t index) const {
-    static ONNXTensorElementDataType input_types[] = {
-      {% for input_type in cookiecutter.input_types -%}
-      {{input_type}},
-      {% endfor %}
-    };
-
-    return input_types[index];
+    return ::GetInputType(index);
   };
 
   size_t GetOutputTypeCount() const { return {{cookiecutter.output_count}}; };
   ONNXTensorElementDataType GetOutputType(size_t index) const {
-    static ONNXTensorElementDataType output_types[] = {
-      {% for output_type in cookiecutter.output_types -%}
-      {{output_type}},
-      {% endfor %}
-    };
-
-    return output_types[index];
+    return ::GetOutputType(index);
   };
 
 } c_TVMModelOp;
