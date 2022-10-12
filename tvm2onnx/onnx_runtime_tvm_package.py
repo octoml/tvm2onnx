@@ -110,6 +110,7 @@ class ONNXRuntimeTVMPackage:
         metadata: typing.Dict[str, str] = {},
         compiler: str = "g++",
         compiler_flags: str = "",
+        remapped_constant_names: typing.Dict[str, str] = {},
     ):
         """Initializes a new package.
 
@@ -125,6 +126,8 @@ class ONNXRuntimeTVMPackage:
         :param dl_device_type: the DLDeviceType
         :param compiler: the name of the compiler to use
         :param compiler_flags: additional compiler flags to pass
+        :param remapped_constant_names: If the constant external file names differ
+            from the tvm constant names use this map to rename names.
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
@@ -139,6 +142,7 @@ class ONNXRuntimeTVMPackage:
         self._metadata = metadata
         self._compiler = compiler
         self._compiler_flags = compiler_flags
+        self._remapped_constant_names = remapped_constant_names
 
     @property
     def template_dir(self):
@@ -291,7 +295,10 @@ class ONNXRuntimeTVMPackage:
             output_names.append(name)
 
         for name, np_data in self._constants_map.items():
-            tvm_constant_names.append(name)
+            if self._remapped_constant_names:
+                tvm_constant_names.append(self._remapped_constant_names[name])
+            else:
+                tvm_constant_names.append(name)
             constant_tensor = make_tensor(
                 name=name,
                 data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np_data.dtype],
