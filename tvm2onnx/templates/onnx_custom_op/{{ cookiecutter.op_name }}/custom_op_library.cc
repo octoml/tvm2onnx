@@ -88,22 +88,21 @@ struct TVMRuntime {
 
   void LateBoundConstants(const Ort::KernelContext& ctx) {
     DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
-    ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
+    tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> const_map;
 
     {% for details in cookiecutter.initializers -%}
     auto _{{details.name}} = ctx.GetInput({{details.index}});
     const {{details.cpp_type}}* _{{details.name}}_ptr = _{{details.name}}.GetTensorData<{{details.cpp_type}}>();
-    DLDataType _{{details.name}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
-    ::tvm::runtime::NDArray _{{details.name}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device_type);
+    DLDataType _{{details.name}}_dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+    tvm::runtime::NDArray _{{details.name}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device_type);
     _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     const_map.Set("{{details.base_name}}", _{{details.name}}_ndarray);
-
     {% endfor %}
 
     // We can't LoadExecutable util we have added late-bound constants so the actual creation
     // of loading takes place here.
     // void Executable::LoadLateBoundConstantsFromMap(Map<String, NDArray> map)
-    // ::tvm::runtime::Map<::tvm::runtime::String, ::tvm::runtime::NDArray> runtime_map(const_map);
+    // tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> runtime_map(const_map);
     exec->LoadLateBoundConstantsFromMap(const_map);
     vm.LoadExecutable(exec);
 
@@ -140,6 +139,7 @@ struct TVMRuntime {
             tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
 
     set_input_func = vm.GetFunction("set_input", nullptr);
+    set_outputs_func = vm.GetFunction("set_outputs", nullptr);
     get_output_func = vm.GetFunction("get_output", nullptr);
     run_func = vm.GetFunction("invoke", nullptr);
   }
@@ -173,7 +173,6 @@ struct TVMRuntime {
       constants_bound = true;
     }
 
-    Ort::KernelContext ctx(context);
     std::vector<DLTensor> ort_dl_inputs;
     {% for details in cookiecutter.inputs -%}
     auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
@@ -202,9 +201,9 @@ struct TVMRuntime {
       isetter(k+1, &ort_dl_inputs[k]);
     }
 
-    tvm::runtime::TVMRetValue rv;
+    tvm::runtime::TVMRetValue irv;
     set_input_func.CallPacked(
-        tvm::runtime::TVMArgs(tvm_in_values.data(), tvm_in_type_codes.data(), int(num_total_iargs)), &rv);
+        tvm::runtime::TVMArgs(tvm_in_values.data(), tvm_in_type_codes.data(), int(num_total_iargs)), &irv);
 
     std::vector<DLTensor> ort_dl_outputs;
     {% for details in cookiecutter.outputs -%}
@@ -230,26 +229,24 @@ struct TVMRuntime {
       setter(k+1, &ort_dl_outputs[k]);
     }
 
-    tvm::runtime::PackedFunc set_output = exec_mod.GetFunction("set_outputs", false);
     tvm::runtime::TVMRetValue rv;
-    set_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
+    set_outputs_func.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
 
-    TVMRun();
-  }
-
-  void TVMRun()
-  {
+    // Inference
     run_func("main");
   }
 
  private:
   tvm::runtime::vm::VirtualMachine vm;
   tvm::runtime::PackedFunc set_input_func;
+  tvm::runtime::PackedFunc set_outputs_func;
   tvm::runtime::PackedFunc get_output_func;
   tvm::runtime::PackedFunc run_func;
   tvm::runtime::Module exec_mod;
   tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec;
   TempFile model_so_file;
+  // TODO(vvchernov): define device type for specific case. define device id
+  DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
   bool constants_bound = false;
 };
 
