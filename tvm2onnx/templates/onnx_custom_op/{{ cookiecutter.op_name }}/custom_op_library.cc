@@ -31,6 +31,26 @@ extern const char model_so_end[] asm("_binary_model_so_end");
 namespace {
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
+static ONNXTensorElementDataType GetInputType(size_t index) {
+  static ONNXTensorElementDataType input_types[] = {
+    {% for input_type in cookiecutter.input_types -%}
+    {{input_type}},
+    {% endfor %}
+  };
+
+  return input_types[index];
+};
+
+static ONNXTensorElementDataType GetOutputType(size_t index) {
+  static ONNXTensorElementDataType output_types[] = {
+    {% for output_type in cookiecutter.output_types -%}
+    {{output_type}},
+    {% endfor %}
+  };
+
+  return output_types[index];
+};
+
 static void AddOrtCustomOpDomainToContainer(Ort::CustomOpDomain&& domain) {
   static std::vector<Ort::CustomOpDomain> ort_custom_op_domain_container;
   static std::mutex ort_custom_op_domain_mutex;
@@ -144,21 +164,21 @@ struct TVMRuntime {
     run_func = vm.GetFunction("invoke", nullptr);
   }
 
-  static DLDataType GetDataType(const std::string& type) {
-    // TODO(vvchernov): support float16 -> {kDLFloat, 16, 1}
-    static std::unordered_map<std::string, DLDataType> cppTypeToDLType = {
-      {"float", DLDataType{kDLFloat, 32, 1}},
-      {"double", DLDataType{kDLFloat, 64, 1}},
-      {"int8_t", {kDLInt, 8, 1}},
-      {"int", {kDLInt, 32, 1}},
-      {"int64_t", {kDLInt, 64, 1}},
-      {"bool", {kDLUInt, 1, 1}}
+  static DLDataType GetDataType(const ONNXTensorElementDataType& type) {
+    static std::unordered_map<ONNXTensorElementDataType, DLDataType> ortTypeToDLType = {
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16, DLDataType{kDLFloat, 16, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, DLDataType{kDLFloat, 32, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE, DLDataType{kDLFloat, 64, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8, DLDataType{kDLInt, 8, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32, DLDataType{kDLInt, 32, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, DLDataType{kDLInt, 64, 1}},
+      {ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL, DLDataType{kDLUInt, 1, 1}}
     };
-    if(!cppTypeToDLType.count(type)) {
+    if(!ortTypeToDLType.count(type)) {
       // TODO(vvchernov): implement with ORT or TVM check API
       throw std::logic_error("Unsupported data type");
     }
-    return cppTypeToDLType[type];
+    return ortTypeToDLType[type];
   }
 
   std::vector<DLTensor> GetInputDLTensors(const Ort::KernelContext& ctx) {
@@ -171,7 +191,7 @@ struct TVMRuntime {
     // TODO(vvchernov): device?
     // auto ort_device_type = input_tensor{{details.index}}.GetTensorMemoryInfo().GetDeviceType();
     dl_input{{details.index}}.device = dl_device_type;
-    dl_input{{details.index}}.dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+    dl_input{{details.index}}.dtype = GetDataType(::GetInputType({{details.index}}));
     dl_input{{details.index}}.strides = nullptr;
     dl_input{{details.index}}.byte_offset = 0;
     dl_input{{details.index}}.data = input_tensor{{details.index}}.GetTensorMutableRawData();
@@ -182,12 +202,12 @@ struct TVMRuntime {
     return ort_dl_inputs;
   }
 
-  void SetInputTensors(const std::vector<DLTensor>& ort_dl_inputs) {
+  void SetInputTensors(const std::vector<DLTensor>& ort_dl_inputs,
+                       const std::string& func_name) {
     size_t num_total_args = ort_dl_inputs.size() + 1;
     std::vector<TVMValue> tvm_in_values(num_total_args);
     std::vector<int> tvm_in_type_codes(num_total_args);
     tvm::runtime::TVMArgsSetter setter(tvm_in_values.data(), tvm_in_type_codes.data());
-    const std::string func_name = "main";
     setter(0, func_name.c_str());
     for (size_t k = 0; k < num_total_args - 1; ++k) {
       setter(k+1, &ort_dl_inputs[k]);
@@ -206,8 +226,10 @@ struct TVMRuntime {
     // TODO(vvchernov): check output{{details.index}}->IsTensor()
     DLTensor dl_output{{details.index}};
     dl_output{{details.index}}.device = dl_device_type;
-    dl_output{{details.index}}.dtype = GetDataType("{{details.cpp_type}}");
+    dl_output{{details.index}}.dtype = GetDataType(::GetOutputType({{details.index}}));
     dl_output{{details.index}}.data = output{{details.index}}.GetTensorMutableRawData();
+    dl_output{{details.index}}.strides = nullptr;
+    dl_output{{details.index}}.byte_offset = 0;
     dl_output{{details.index}}.ndim = {{details.rank}};
     dl_output{{details.index}}.shape = output{{details.index}}_shape.data();
     ort_dl_outputs.emplace_back(dl_output{{details.index}});
@@ -215,12 +237,12 @@ struct TVMRuntime {
     return ort_dl_outputs;
   }
 
-  void LinkOutputTensors(const std::vector<DLTensor>& ort_dl_outputs) {
+  void LinkOutputTensors(const std::vector<DLTensor>& ort_dl_outputs,
+                         const std::string& func_name) {
     size_t num_total_args = ort_dl_outputs.size() + 1;
     std::vector<TVMValue> tvm_values(num_total_args);
     std::vector<int> tvm_type_codes(num_total_args);
     tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
-    const std::string func_name = "main";
     setter(0, func_name.c_str());
     for (size_t k = 0; k < num_total_args - 1; ++k) {
       setter(k+1, &ort_dl_outputs[k]);
@@ -239,14 +261,17 @@ struct TVMRuntime {
       constants_bound = true;
     }
 
+    // Formally we should do set_input, set_outputs and run for the same func name
+    // TODO(vvchernov): can func_name be not "main"? I have never seen such case
+    const std::string func_name = "main";
     std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(ctx);
-    SetInputTensors(ort_dl_inputs);
+    SetInputTensors(ort_dl_inputs, func_name);
 
     std::vector<DLTensor> ort_dl_outputs = GetOutputDLTensors(ctx);
-    LinkOutputTensors(ort_dl_outputs);
+    LinkOutputTensors(ort_dl_outputs, func_name);
 
     // Inference
-    run_func("main");
+    run_func(func_name);
   }
 
  private:
@@ -275,24 +300,12 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
 
   size_t GetInputTypeCount() const { return {{cookiecutter.input_count}} + {{cookiecutter.initializer_count}}; };
   ONNXTensorElementDataType GetInputType(size_t index) const {
-    static ONNXTensorElementDataType input_types[] = {
-      {% for input_type in cookiecutter.input_types -%}
-      {{input_type}},
-      {% endfor %}
-    };
-
-    return input_types[index];
+    return ::GetInputType(index);
   };
 
   size_t GetOutputTypeCount() const { return {{cookiecutter.output_count}}; };
   ONNXTensorElementDataType GetOutputType(size_t index) const {
-    static ONNXTensorElementDataType output_types[] = {
-      {% for output_type in cookiecutter.output_types -%}
-      {{output_type}},
-      {% endfor %}
-    };
-
-    return output_types[index];
+    return ::GetOutputType(index);
   };
 
 };
