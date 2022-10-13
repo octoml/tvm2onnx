@@ -206,7 +206,7 @@ struct TVMRuntime {
     std::vector<DLTensor> ort_dl_inputs;
     {% for details in cookiecutter.inputs -%}
     auto* input_tensor{{details.index}} = ort_.KernelContext_GetInput(context, {{details.index}});
-    int64_t input{{details.index}}_shape[] = {{details.shape}};
+    static int64_t input{{details.index}}_shape[] = {{details.shape}};
 
     DLTensor dl_input{{details.index}};
     // TODO(vvchernov): device?
@@ -241,7 +241,7 @@ struct TVMRuntime {
   std::vector<DLTensor> GetOutputDLTensors(OrtKernelContext* context) {
     std::vector<DLTensor> ort_dl_outputs;
     {% for details in cookiecutter.outputs -%}
-    int64_t output{{details.index}}_shape[] = {{details.shape}};
+    static int64_t output{{details.index}}_shape[] = {{details.shape}};
     auto* output{{details.index}} = ort_.KernelContext_GetOutput(context, {{details.index}}, output{{details.index}}_shape, {{details.rank}});
     // TODO(vvchernov): check output{{details.index}}->IsTensor()
     DLTensor dl_output{{details.index}};
@@ -284,7 +284,7 @@ struct TVMRuntime {
     SetInputTensors(ort_dl_inputs, func_name);
 
     std::vector<DLTensor> ort_dl_outputs = GetOutputDLTensors(context);
-    LinkOutputTensors(ort_dl_inputs, func_name);
+    LinkOutputTensors(ort_dl_outputs, func_name);
 
     // Inference
     run_func(func_name);
