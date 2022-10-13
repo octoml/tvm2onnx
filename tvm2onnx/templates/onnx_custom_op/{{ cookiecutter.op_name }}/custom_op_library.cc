@@ -247,6 +247,8 @@ struct TVMRuntime {
     DLTensor dl_output{{details.index}};
     dl_output{{details.index}}.device = dl_device_type;
     dl_output{{details.index}}.dtype = GetDataType(::GetOutputType({{details.index}}));
+    dl_output{{details.index}}.strides = nullptr;
+    dl_output{{details.index}}.byte_offset = 0;
     dl_output{{details.index}}.data = ort_.GetTensorMutableData<void>(output{{details.index}});
     dl_output{{details.index}}.ndim = {{details.rank}};
     dl_output{{details.index}}.shape = output{{details.index}}_shape;
