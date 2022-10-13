@@ -39,7 +39,7 @@ static ONNXTensorElementDataType GetInputType(size_t index) {
   return input_types[index];
 };
 
-static ONNXTensorElementDataType GetOutputType(size_t index) const {
+static ONNXTensorElementDataType GetOutputType(size_t index) {
   static ONNXTensorElementDataType output_types[] = {
     {% for output_type in cookiecutter.output_types -%}
     {{output_type}},
