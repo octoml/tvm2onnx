@@ -9,7 +9,7 @@ def test_package_and_benchmark():
             "python",
             "scripts/onnx_package.py",
             "--input",
-            "tests/testdata/abtest.onnx",
+            "tests/testdata/big_model.onnx",
             "--output",
             model_path,
         ]
