@@ -109,11 +109,7 @@ def run_with_custom_op(onnx_model_path, custom_lib, input_data):
     return output_data
 
 
-@pytest.mark.parametrize(
-    "dtype_str",
-    _DTYPE_LIST,
-)
-def test_onnx_package(dtype_str):
+def test_onnx_package():
     with tempfile.TemporaryDirectory() as tdir:
         relay_model = RelayModel.from_onnx(
             onnx.load(_MODEL_PATH), dynamic_axis_substitute=1
