@@ -219,3 +219,74 @@ def test_debug_build():
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
         assert np.allclose(expected, actual)
+
+
+@pytest.mark.parametrize("dtype_str2", _DTYPE_LIST)
+@pytest.mark.parametrize("dtype_str1", _DTYPE_LIST)
+def test_cast_model(dtype_str1, dtype_str2):
+    # TODO(agladyshev): investigate this issue
+    if dtype_str1 == "float64" and dtype_str2 == "float16":
+        pytest.skip(
+            f"Currently conversion {dtype_str1} to {dtype_str2} doesn't supported"
+        )
+
+    shape = (1, 2, 3, 4)
+    dtype1 = np.dtype(dtype_str1)
+    dtype2 = np.dtype(dtype_str2)
+
+    def make_cast_model(model_shape, input_dtype, output_dtype, save_path):
+        input_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype(input_dtype)]
+        output_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype(output_dtype)]
+
+        cast_node = make_node(
+            "Cast", inputs=["input"], outputs=["output"], to=output_type
+        )
+
+        graph = make_graph(
+            [cast_node],
+            "cast_model_test",
+            inputs=[
+                make_tensor_value_info("input", input_type, model_shape),
+            ],
+            outputs=[make_tensor_value_info("output", output_type, model_shape)],
+        )
+
+        model = make_model(graph, producer_name="cast_model_test")
+        onnx.checker.check_model(model)
+        onnx.save(model, save_path)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Make source ONNX model
+        source_model_path = os.path.join(temp_dir, "cast.onnx")
+        make_cast_model(shape, dtype1, dtype2, source_model_path)
+
+        # Package to Custom Op format
+        custom_op_model_name = f"cast_{dtype1}_to_{dtype2}"
+        custom_op_tar_path = os.path.join(temp_dir, f"{custom_op_model_name}.onnx")
+        relay_model = RelayModel.from_onnx(
+            onnx.load(source_model_path), dynamic_axis_substitute=1
+        )
+        relay_model.package_to_onnx(
+            name=custom_op_model_name,
+            tvm_target="llvm",
+            output_path=custom_op_tar_path,
+        )
+
+        # Extract Custom Op ONNX file and Custom Op shared library
+        custom_op_model_dir = os.path.join(temp_dir, "model")
+        with tarfile.open(custom_op_tar_path, "r") as tar:
+            tar.extractall(custom_op_model_dir)
+        onnx_model_path = os.path.join(
+            custom_op_model_dir, f"{custom_op_model_name}.onnx"
+        )
+        custom_lib = os.path.join(
+            custom_op_model_dir, f"custom_{custom_op_model_name}.so"
+        )
+
+        # Run inference
+        input_data = {
+            "input": np.random.randn(*shape).astype(dtype1),
+        }
+
+        output = run_with_custom_op(onnx_model_path, custom_lib, input_data)
+        assert output[0].dtype == dtype2
