@@ -36,54 +36,6 @@ _DTYPE_LIST = [
 ]
 
 
-@pytest.mark.parametrize(
-    "dtype_str",
-    _DTYPE_LIST,
-)
-def test_onnx_package(dtype_str):
-    with tempfile.TemporaryDirectory() as tdir:
-        relay_model = RelayModel.from_onnx(
-            onnx.load(_MODEL_PATH), dynamic_axis_substitute=1
-        )
-        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
-        relay_model.package_to_onnx(
-            name="test_model",
-            tvm_target="llvm",
-            output_path=onnx_path,
-        )
-        model_dir = os.path.join(tdir, "model")
-        with tarfile.open(onnx_path, "r") as tar:
-            tar.extractall(model_dir)
-        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
-        custom_lib = os.path.join(model_dir, "custom_test_model.so")
-
-        input_data = {}
-        input_data["a"] = np.array(
-            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], dtype=np.float32
-        )
-        input_data["b"] = np.array(
-            [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], dtype=np.float32
-        )
-
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.register_custom_ops_library(custom_lib)
-
-        session = onnxruntime.InferenceSession(
-            onnx_model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
-        )
-        output_data = session.run(output_names=None, input_feed=input_data)
-
-        sum = input_data["a"] + input_data["b"]
-        product = input_data["a"] * input_data["b"]
-        actual_sum = output_data[0]
-        actual_product = output_data[1]
-        assert np.allclose(sum, actual_sum)
-        assert np.allclose(product, actual_product)
-
-
 def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     """Returns an ONNX model with external constants."""
     dtype = np.dtype(dtype_str)
@@ -95,7 +47,6 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
         c1_data = np.random.randn(*input_shape).astype(dtype)
         c2_data = np.random.randn(*input_shape).astype(dtype)
 
-    initializers = []
     c1 = make_tensor(
         name="c1",
         data_type=NP_TYPE_TO_TENSOR_TYPE[dtype],
@@ -143,6 +94,62 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     return c1_data, c2_data
 
 
+def run_with_custom_op(onnx_model_path, custom_lib, input_data):
+    sess_options = onnxruntime.SessionOptions()
+    sess_options.register_custom_ops_library(custom_lib)
+
+    session = onnxruntime.InferenceSession(
+        onnx_model_path,
+        providers=["CPUExecutionProvider"],
+        provider_options=[{}],
+        sess_options=sess_options,
+    )
+    output_data = session.run(output_names=None, input_feed=input_data)
+
+    return output_data
+
+
+@pytest.mark.parametrize(
+    "dtype_str",
+    _DTYPE_LIST,
+)
+def test_onnx_package(dtype_str):
+    with tempfile.TemporaryDirectory() as tdir:
+        relay_model = RelayModel.from_onnx(
+            onnx.load(_MODEL_PATH), dynamic_axis_substitute=1
+        )
+        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+        relay_model.package_to_onnx(
+            name="test_model",
+            tvm_target="llvm",
+            output_path=onnx_path,
+        )
+        model_dir = os.path.join(tdir, "model")
+        with tarfile.open(onnx_path, "r") as tar:
+            tar.extractall(model_dir)
+        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
+        custom_lib = os.path.join(model_dir, "custom_test_model.so")
+
+        input_data = {
+            "a": np.array(
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                dtype=np.float32,
+            ),
+            "b": np.array(
+                [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], dtype=np.float32
+            ),
+        }
+
+        output_data = run_with_custom_op(onnx_model_path, custom_lib, input_data)
+
+        sum = input_data["a"] + input_data["b"]
+        product = input_data["a"] * input_data["b"]
+        actual_sum = output_data[0]
+        actual_product = output_data[1]
+        assert np.allclose(sum, actual_sum)
+        assert np.allclose(product, actual_product)
+
+
 @pytest.mark.parametrize(
     "dtype_str",
     _DTYPE_LIST,
@@ -171,19 +178,11 @@ def test_constant_model(dtype_str):
         onnx_model_path = os.path.join(model_dir, f"test_model_{dtype_str}.onnx")
         custom_lib = os.path.join(model_dir, f"custom_test_model_{dtype_str}.so")
 
-        input_data = {}
-        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
+        input_data = {
+            "a": np.random.randn(*c1_data.shape).astype(dtype),
+        }
 
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.register_custom_ops_library(custom_lib)
-
-        session = onnxruntime.InferenceSession(
-            onnx_model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
-        )
-        result = session.run(output_names=None, input_feed=input_data)
+        result = run_with_custom_op(onnx_model_path, custom_lib, input_data)
 
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
@@ -215,19 +214,11 @@ def test_debug_build():
         onnx_model_path = os.path.join(model_dir, "test_model_debug.onnx")
         custom_lib = os.path.join(model_dir, "custom_test_model_debug.so")
 
-        input_data = {}
-        input_data["a"] = np.random.randn(*c1_data.shape).astype(dtype)
+        input_data = {
+            "a": np.random.randn(*c1_data.shape).astype(dtype),
+        }
 
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.register_custom_ops_library(custom_lib)
-
-        session = onnxruntime.InferenceSession(
-            onnx_model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
-        )
-        result = session.run(output_names=None, input_feed=input_data)
+        result = run_with_custom_op(onnx_model_path, custom_lib, input_data)
 
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
