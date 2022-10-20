@@ -37,7 +37,10 @@ def get_tvm_includes() -> typing.List[pathlib.Path]:
 
 
 def get_ort_includes() -> typing.List[pathlib.Path]:
-    return [pathlib.Path(os.path.join(os.environ["ORT_HOME"], "include"))]
+    return [
+        pathlib.Path(os.path.join(os.environ["ORT_HOME"], "include")),
+        pathlib.Path(os.path.join(os.environ["ORT_HOME"], "include", "onnxruntime")),
+    ]
 
 
 class RelayTensorDetail(typing.NamedTuple):
