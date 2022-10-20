@@ -4,6 +4,8 @@
 #include "onnxruntime/core/session/onnxruntime_cxx_api.h"
 #undef ORT_API_MANUAL_INIT
 
+#include "onnxruntime/core/common/common.h"
+
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -29,54 +31,12 @@ extern const char model_so_end[] asm("_binary_model_so_end");
 namespace {
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
-static ONNXTensorElementDataType GetInputType(size_t index) {
-  static ONNXTensorElementDataType input_types[] = {
-    {% for input_type in cookiecutter.input_types -%}
-    {{input_type}},
-    {% endfor %}
-  };
-
-  return input_types[index];
-};
-
-static ONNXTensorElementDataType GetOutputType(size_t index) {
-  static ONNXTensorElementDataType output_types[] = {
-    {% for output_type in cookiecutter.output_types -%}
-    {{output_type}},
-    {% endfor %}
-  };
-
-  return output_types[index];
-};
-
-struct OrtCustomOpDomainDeleter {
-  explicit OrtCustomOpDomainDeleter(const OrtApi* ort_api) {
-    ort_api_ = ort_api;
-  }
-  void operator()(OrtCustomOpDomain* domain) const {
-    ort_api_->ReleaseCustomOpDomain(domain);
-  }
-
-  const OrtApi* ort_api_;
-};
-
-using OrtCustomOpDomainUniquePtr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>;
-static std::vector<OrtCustomOpDomainUniquePtr> ort_custom_op_domain_container;
-static std::mutex ort_custom_op_domain_mutex;
-
-static void AddOrtCustomOpDomainToContainer(OrtCustomOpDomain* domain, const OrtApi* ort_api) {
+static void AddOrtCustomOpDomainToContainer(Ort::CustomOpDomain&& domain) {
+  static std::vector<Ort::CustomOpDomain> ort_custom_op_domain_container;
+  static std::mutex ort_custom_op_domain_mutex;
   std::lock_guard<std::mutex> lock(ort_custom_op_domain_mutex);
-  auto ptr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>(domain, OrtCustomOpDomainDeleter(ort_api));
-  ort_custom_op_domain_container.push_back(std::move(ptr));
+  ort_custom_op_domain_container.push_back(std::move(domain));
 }
-
-struct OrtTensorDimensions : std::vector<int64_t> {
-  OrtTensorDimensions(Ort::CustomOpApi ort, const OrtValue* value) {
-    OrtTensorTypeAndShapeInfo* info = ort.GetTensorTypeAndShape(value);
-    std::vector<int64_t>::operator=(ort.GetTensorShape(info));
-    ort.ReleaseTensorTypeAndShapeInfo(info);
-  }
-};
 
 class TempFile {
   public:
@@ -320,8 +280,7 @@ std::unique_ptr<TVMRunnerBase> GetRunner(const Ort::CustomOpApi& ort, TVMFuncsPt
 }
 
 struct TVMRuntime {
-  TVMRuntime(const OrtApi& api)
-      : ort_(api) {
+  TVMRuntime() {
     // Binary data is linked into this shared library
     // These symbols are defined by adding lines like this to the compile string
     // -Wl,--format=binary -Wl,vm_exec_code.ro -Wl,--format=default
@@ -350,15 +309,16 @@ struct TVMRuntime {
   ~TVMRuntime() {
   }
 
-  void LateBoundConstants(OrtKernelContext* context) {
-    tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> const_map;
+  void LateBoundConstants(const Ort::KernelContext& ctx) {
+    DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
+    tvm::runtime::Map<::tvm::runtime::String, tvm::runtime::NDArray> const_map;
 
     // TODO(vvchernov): double RAM consumption?
     {% for details in cookiecutter.initializers -%}
-    const OrtValue* _{{details.name}} = ort_.KernelContext_GetInput(context, {{details.index}});
-    const {{details.cpp_type}}* _{{details.name}}_ptr = ort_.GetTensorData<{{details.cpp_type}}>(_{{details.name}});
+    auto _{{details.name}} = ctx.GetInput({{details.index}});
+    const {{details.cpp_type}}* _{{details.name}}_ptr = _{{details.name}}.GetTensorData<{{details.cpp_type}}>();
     DLDataType _{{details.name}}_dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
-    tvm::runtime::NDArray _{{details.name}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device);
+    tvm::runtime::NDArray _{{details.name}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device_type);
     _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     const_map.Set("{{details.base_name}}", _{{details.name}}_ndarray);
     {% endfor %}
@@ -411,19 +371,76 @@ struct TVMRuntime {
   }
 
   void Compute(OrtKernelContext* context) {
+    Ort::KernelContext ctx(context);
+    // Get data points for the input data
+    DLDevice dl_device_type = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
+
     if (!constants_bound) {
       // During the first iteration we need to bind the late-bound constants to TVM and
       // create the VM. This is our first opportunity to access the onnx external constants.
-      LateBoundConstants(context);
+      LateBoundConstants(ctx);
       constants_bound = true;
     }
 
-    runner->run(context);
+    std::vector<tvm::runtime::NDArray> input_vec;
+    {% for details in cookiecutter.inputs -%}
+    auto input{{details.index}} = ctx.GetInput({{details.index}});
+    const {{details.cpp_type}}* input{{details.index}}_ptr = input{{details.index}}.GetTensorData<{{details.cpp_type}}>();
+    int64_t input{{details.index}}_shape[] = {{details.shape}};
+    DLDataType input{{details.index}}_dtype = ::tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+    ::tvm::runtime::NDArray input{{details.index}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, input{{details.index}}_dtype, dl_device_type);
+    input{{details.index}}_ndarray.CopyFromBytes(input{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
+    input_vec.push_back(input{{details.index}}_ndarray);
+    {% endfor %}
+
+    {% for details in cookiecutter.outputs -%}
+    std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
+    auto output{{details.index}} = ctx.GetOutput({{details.index}}, output{{details.index}}_shape);
+    {{details.cpp_type}}* output{{details.index}}_ptr = output{{details.index}}.GetTensorMutableData<{{details.cpp_type}}>();
+    {% endfor %}
+
+    std::vector<tvm::runtime::NDArray> outputs = TVMRun(input_vec);
+
+    // Copy result data to ort output tensors
+    {% for details in cookiecutter.outputs -%}
+    outputs[{{details.index}}].CopyToBytes(output{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
+    {% endfor %}
+  }
+
+  std::vector<tvm::runtime::NDArray>
+  TVMRun(const std::vector<tvm::runtime::NDArray>& input_vec)
+  {
+    // arity is num of inputs + 1, because first argument to the set_input_func
+    // is the name of the function that should take those inputs.
+    size_t arity = input_vec.size() + 1;
+    std::vector<TVMValue> values(arity);
+    std::vector<int> codes(arity);
+    tvm::runtime::TVMArgsSetter setter(values.data(), codes.data());
+    setter(0, "main");
+    for (size_t i = 1; i < arity; i++) {
+      setter(i, input_vec.at(i - 1));
+    }
+
+    tvm::runtime::TVMRetValue rv;
+    set_input_func.CallPacked(
+        tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
+
+    tvm::runtime::ObjectRef out = run_func("main");
+    std::vector<tvm::runtime::NDArray> outputs;
+    if (out.as<tvm::runtime::ADTObj>()) {
+      auto adt = tvm::Downcast<tvm::runtime::ADT>(out);
+      for (size_t i = 0; i < adt.size(); ++i) {
+        tvm::runtime::NDArray arr = tvm::Downcast<tvm::runtime::NDArray>(adt[i]);
+        outputs.push_back(arr);
+      }
+    } else {
+      tvm::runtime::NDArray arr = tvm::Downcast<tvm::runtime::NDArray>(out);
+      outputs.push_back(arr);
+    }
+    return outputs;
   }
 
  private:
-  Ort::CustomOpApi ort_;
-  std::unique_ptr<TVMRunnerBase> runner;
   tvm::runtime::vm::VirtualMachine vm;
   tvm::runtime::Module exec_mod;
   tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec;
@@ -435,8 +452,8 @@ struct TVMRuntime {
 };
 
 struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
-  void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info) const {
-    return new TVMRuntime(api);
+  void* CreateKernel(const OrtApi& /* api */, const OrtKernelInfo* /* info */) const {
+    return new TVMRuntime();
   };
 
   const char* GetName() const {
@@ -454,22 +471,28 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
     return ::GetOutputType(index);
   };
 
-} c_TVMModelOp;
+};
 } // End anonymous namespace
 
 OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api) {
-  OrtCustomOpDomain* domain = nullptr;
-  const OrtApi* ortApi = api->GetApi(ORT_API_VERSION);
+  Ort::Global<void>::api_ = api->GetApi(ORT_API_VERSION);
 
-  if (auto status = ortApi->CreateCustomOpDomain(c_OpDomain, &domain)) {
-    return status;
+  static const TVMModelOp c_TVMModelOp;
+
+  OrtStatus* result = nullptr;
+
+  ORT_TRY {
+    Ort::CustomOpDomain domain{c_OpDomain};
+    domain.Add(&c_TVMModelOp);
+
+    Ort::UnownedSessionOptions session_options(options);
+    session_options.Add(domain);
+    AddOrtCustomOpDomainToContainer(std::move(domain));
+  } ORT_CATCH (const std::exception& e) {
+    ORT_HANDLE_EXCEPTION([&]() {
+      Ort::Status status{e};
+      result = status.release();
+    });
   }
-
-  AddOrtCustomOpDomainToContainer(domain, ortApi);
-
-  if (auto status = ortApi->CustomOpDomain_Add(domain, &c_TVMModelOp)) {
-    return status;
-  }
-
-  return ortApi->AddCustomOpDomain(options, domain);
+  return result;
 }
