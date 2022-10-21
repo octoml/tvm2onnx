@@ -186,7 +186,7 @@ struct TVMRuntime {
     {% for details in cookiecutter.inputs -%}
     auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
     // Save shapes, DL container does not do it
-    static const std::vector<int64_t> input{{details.index}}_shape = {{details.shape}};
+    static std::vector<int64_t> input{{details.index}}_shape = {{details.shape}};
 
     DLTensor dl_input{{details.index}};
     // TODO(vvchernov): device?
@@ -195,7 +195,7 @@ struct TVMRuntime {
     dl_input{{details.index}}.dtype = GetDataType(::GetInputType({{details.index}}));
     dl_input{{details.index}}.strides = nullptr;
     dl_input{{details.index}}.byte_offset = 0;
-    dl_input{{details.index}}.data = input_tensor{{details.index}}.GetTensorMutableRawData();
+    dl_input{{details.index}}.data = const_cast<void*>(input_tensor{{details.index}}.GetTensorRawData());
     dl_input{{details.index}}.ndim = {{details.rank}};
     dl_input{{details.index}}.shape = input{{details.index}}_shape.data();
     ort_dl_inputs.emplace_back(dl_input{{details.index}});
@@ -203,7 +203,7 @@ struct TVMRuntime {
     return ort_dl_inputs;
   }
 
-  void SetInputTensors(const std::vector<DLTensor>& ort_dl_inputs,
+  void SetInputTensors(std::vector<DLTensor>& ort_dl_inputs,
                        const std::string& func_name) {
     size_t num_total_args = ort_dl_inputs.size() + 1;
     std::vector<TVMValue> tvm_in_values(num_total_args);
@@ -223,7 +223,7 @@ struct TVMRuntime {
     std::vector<DLTensor> ort_dl_outputs;
     {% for details in cookiecutter.outputs -%}
     // Save shapes, DL container does not do it
-    static const std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
+    static std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
     auto output{{details.index}} = ctx.GetOutput({{details.index}}, output{{details.index}}_shape);
     // TODO(vvchernov): check output{{details.index}}->IsTensor()
     DLTensor dl_output{{details.index}};
@@ -239,7 +239,7 @@ struct TVMRuntime {
     return ort_dl_outputs;
   }
 
-  void LinkOutputTensors(const std::vector<DLTensor>& ort_dl_outputs,
+  void LinkOutputTensors(std::vector<DLTensor>& ort_dl_outputs,
                          const std::string& func_name) {
     size_t num_total_args = ort_dl_outputs.size() + 1;
     std::vector<TVMValue> tvm_values(num_total_args);
