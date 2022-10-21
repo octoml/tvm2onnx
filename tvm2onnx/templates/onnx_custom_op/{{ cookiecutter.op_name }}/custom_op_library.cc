@@ -408,7 +408,8 @@ struct TVMRuntime {
     std::vector<DLTensor> ort_dl_inputs;
     {% for details in cookiecutter.inputs -%}
     auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
-    std::vector<int64_t> input{{details.index}}_shape = {{details.shape}};
+    // Save shapes, DL container does not do it
+    static const std::vector<int64_t> input{{details.index}}_shape = {{details.shape}};
 
     DLTensor dl_input{{details.index}};
     // TODO(vvchernov): device?
@@ -444,7 +445,8 @@ struct TVMRuntime {
   std::vector<DLTensor> GetOutputDLTensors(const Ort::KernelContext& ctx) {
     std::vector<DLTensor> ort_dl_outputs;
     {% for details in cookiecutter.outputs -%}
-    std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
+    // Save shapes, DL container does not do it
+    static const std::vector<int64_t> output{{details.index}}_shape = {{details.shape}};
     auto output{{details.index}} = ctx.GetOutput({{details.index}}, output{{details.index}}_shape);
     // TODO(vvchernov): check output{{details.index}}->IsTensor()
     DLTensor dl_output{{details.index}};
