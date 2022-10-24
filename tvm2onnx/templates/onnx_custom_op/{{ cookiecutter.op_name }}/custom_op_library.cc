@@ -326,17 +326,7 @@ struct TVMRuntime {
   }
 
   void LateBoundConstants(const Ort::KernelContext& ctx) {
-    tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> const_map;
-
-    // TODO(vvchernov): double RAM consumption?
-    {% for details in cookiecutter.initializers -%}
-    auto _{{details.name}} = ctx.GetInput({{details.index}});
-    const {{details.cpp_type}}* _{{details.name}}_ptr = _{{details.name}}.GetTensorData<{{details.cpp_type}}>();
-    DLDataType _{{details.name}}_dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
-    tvm::runtime::NDArray _{{details.name}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device);
-    _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
-    const_map.Set("{{details.base_name}}", _{{details.name}}_ndarray);
-    {% endfor %}
+    tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> const_map = GetInitializerMap(ctx);
 
     // We can't LoadExecutable util we have added late-bound constants so the actual creation
     // of loading takes place here.
@@ -383,6 +373,32 @@ struct TVMRuntime {
       vm.GetFunction("invoke", nullptr)
     });
     runner = GetRunner(std::move(funcs), use_zero_copy);
+  }
+
+  tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> GetInitializerMap(const Ort::KernelContext& ctx) {
+    using TVMArray = tvm::runtime::NDArray;
+    tvm::runtime::Map<tvm::runtime::String, TVMArray> const_map;
+
+    {% for details in cookiecutter.initializers -%}
+    auto init_tensor{{details.index}} = ctx.GetInput({{details.index}});
+    // Save shapes, DL container does not do it
+    static std::vector<int64_t> init{{details.index}}_shape = {{details.shape}};
+
+    DLTensor dl_input{{details.index}};
+    // TODO(vvchernov): device?
+    // auto ort_device_type = input_tensor{{details.index}}.GetTensorMemoryInfo().GetDeviceType();
+    dl_input{{details.index}}.device = dl_device_type;
+    dl_input{{details.index}}.dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+    dl_input{{details.index}}.strides = nullptr;
+    dl_input{{details.index}}.byte_offset = 0;
+    dl_input{{details.index}}.data = const_cast<void*>(init_tensor{{details.index}}.GetTensorRawData());
+    dl_input{{details.index}}.ndim = {{details.rank}};
+    dl_input{{details.index}}.shape = init{{details.index}}_shape.data();
+
+    TVMArray {{details.name}}_ndarray = TVMArray::FromExternalDLTensor(dl_input{{details.index}});
+    const_map.Set("{{details.base_name}}", {{details.name}}_ndarray);
+    {% endfor %}
+    return const_map;
   }
 
   void Compute(OrtKernelContext* context) {
