@@ -5,7 +5,6 @@ import tempfile
 
 import numpy as np
 import onnx
-import onnxruntime
 import pytest
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
@@ -94,17 +93,37 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     return c1_data, c2_data
 
 
-def run_with_custom_op(onnx_model_path, custom_lib, input_data):
-    sess_options = onnxruntime.SessionOptions()
-    sess_options.register_custom_ops_library(custom_lib)
+def run_with_custom_op(custom_op_model_name, custom_op_model_dir, input_data):
+    import pickle
+    import subprocess
 
-    session = onnxruntime.InferenceSession(
-        onnx_model_path,
-        providers=["CPUExecutionProvider"],
-        provider_options=[{}],
-        sess_options=sess_options,
-    )
-    output_data = session.run(output_names=None, input_feed=input_data)
+    with tempfile.TemporaryDirectory() as temp_directory:
+        input_data_file_name = os.path.join(temp_directory, "input_data")
+        output_data_file_name = os.path.join(temp_directory, "output_data")
+
+        with open(input_data_file_name, "wb") as input_data_file:
+            serialized_input_data = pickle.dumps(input_data)
+            input_data_file.write(serialized_input_data)
+
+        inference_cmd = [
+            "python",
+            "run_inference_in_subprocess.py",
+            "--custom_op_model_name",
+            custom_op_model_name,
+            "--custom_op_model_dir",
+            custom_op_model_dir,
+            "--input_data_file",
+            input_data_file_name,
+            "--output_data_file",
+            output_data_file_name,
+        ]
+        result = subprocess.run(
+            inference_cmd, cwd=os.path.join(os.path.dirname(__file__))
+        )
+        assert result.returncode == 0
+
+        with open(output_data_file_name, "rb") as output_data_file:
+            output_data = pickle.loads(output_data_file.read())
 
     return output_data
 
@@ -114,17 +133,16 @@ def test_onnx_package():
         relay_model = RelayModel.from_onnx(
             onnx.load(_MODEL_PATH), dynamic_axis_substitute=1
         )
-        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+        custom_op_model_name = "test_model"
+        custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
         relay_model.package_to_onnx(
-            name="test_model",
+            name=custom_op_model_name,
             tvm_target="llvm",
-            output_path=onnx_path,
+            output_path=custom_op_tar_path,
         )
-        model_dir = os.path.join(tdir, "model")
-        with tarfile.open(onnx_path, "r") as tar:
-            tar.extractall(model_dir)
-        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
-        custom_lib = os.path.join(model_dir, "custom_test_model.so")
+        custom_op_model_dir = os.path.join(tdir, "model")
+        with tarfile.open(custom_op_tar_path, "r") as tar:
+            tar.extractall(custom_op_model_dir)
 
         input_data = {
             "a": np.array(
@@ -136,7 +154,9 @@ def test_onnx_package():
             ),
         }
 
-        output_data = run_with_custom_op(onnx_model_path, custom_lib, input_data)
+        output_data = run_with_custom_op(
+            custom_op_model_name, custom_op_model_dir, input_data
+        )
 
         sum = input_data["a"] + input_data["b"]
         product = input_data["a"] * input_data["b"]
@@ -161,24 +181,24 @@ def test_constant_model(dtype_str):
         relay_model = RelayModel.from_onnx(
             onnx.load(model_path), dynamic_axis_substitute=1
         )
-        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+        custom_op_model_name = f"test_model_{dtype_str}"
+        custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
         relay_model.package_to_onnx(
-            name=f"test_model_{dtype_str}",
+            name=custom_op_model_name,
             tvm_target="llvm",
-            output_path=onnx_path,
+            output_path=custom_op_tar_path,
         )
-        model_dir = os.path.join(tdir, "model")
-        with tarfile.open(onnx_path, "r") as tar:
-            tar.extractall(model_dir)
-
-        onnx_model_path = os.path.join(model_dir, f"test_model_{dtype_str}.onnx")
-        custom_lib = os.path.join(model_dir, f"custom_test_model_{dtype_str}.so")
+        custom_op_model_dir = os.path.join(tdir, "model")
+        with tarfile.open(custom_op_tar_path, "r") as tar:
+            tar.extractall(custom_op_model_dir)
 
         input_data = {
             "a": np.random.randn(*c1_data.shape).astype(dtype),
         }
 
-        result = run_with_custom_op(onnx_model_path, custom_lib, input_data)
+        result = run_with_custom_op(
+            custom_op_model_name, custom_op_model_dir, input_data
+        )
 
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
@@ -196,25 +216,25 @@ def test_debug_build():
         relay_model = RelayModel.from_onnx(
             onnx.load(model_path), dynamic_axis_substitute=1
         )
-        onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+        custom_op_model_name = "test_model_debug"
+        custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
         relay_model.package_to_onnx(
-            name="test_model_debug",
+            name=custom_op_model_name,
             tvm_target="llvm",
-            output_path=onnx_path,
+            output_path=custom_op_tar_path,
             debug_build=True,
         )
-        model_dir = os.path.join(tdir, "model")
-        with tarfile.open(onnx_path, "r") as tar:
-            tar.extractall(model_dir)
-
-        onnx_model_path = os.path.join(model_dir, "test_model_debug.onnx")
-        custom_lib = os.path.join(model_dir, "custom_test_model_debug.so")
+        custom_op_model_dir = os.path.join(tdir, "model")
+        with tarfile.open(custom_op_tar_path, "r") as tar:
+            tar.extractall(custom_op_model_dir)
 
         input_data = {
             "a": np.random.randn(*c1_data.shape).astype(dtype),
         }
 
-        result = run_with_custom_op(onnx_model_path, custom_lib, input_data)
+        result = run_with_custom_op(
+            custom_op_model_name, custom_op_model_dir, input_data
+        )
 
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
@@ -276,17 +296,12 @@ def test_cast_model(dtype_str1, dtype_str2):
         custom_op_model_dir = os.path.join(temp_dir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
             tar.extractall(custom_op_model_dir)
-        onnx_model_path = os.path.join(
-            custom_op_model_dir, f"{custom_op_model_name}.onnx"
-        )
-        custom_lib = os.path.join(
-            custom_op_model_dir, f"custom_{custom_op_model_name}.so"
-        )
 
         # Run inference
         input_data = {
             "input": np.random.randn(*shape).astype(dtype1),
         }
-
-        output = run_with_custom_op(onnx_model_path, custom_lib, input_data)
+        output = run_with_custom_op(
+            custom_op_model_name, custom_op_model_dir, input_data
+        )
         assert output[0].dtype == dtype2
