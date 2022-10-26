@@ -110,6 +110,7 @@ class ONNXRuntimeTVMPackage:
         metadata: typing.Dict[str, str] = {},
         compiler: str = "g++",
         compiler_flags: str = "",
+        use_zero_copy: bool = False,
     ):
         """Initializes a new package.
 
@@ -139,6 +140,7 @@ class ONNXRuntimeTVMPackage:
         self._metadata = metadata
         self._compiler = compiler
         self._compiler_flags = compiler_flags
+        self._use_zero_copy = use_zero_copy
 
     @property
     def template_dir(self):
@@ -255,6 +257,7 @@ class ONNXRuntimeTVMPackage:
             "domain": domain,
             "compiler": self._compiler,
             "compiler_flags": self._compiler_flags,
+            "use_zero_copy": self._use_zero_copy,
         }
 
     def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
