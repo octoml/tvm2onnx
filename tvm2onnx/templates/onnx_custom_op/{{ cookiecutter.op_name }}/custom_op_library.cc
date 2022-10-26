@@ -116,31 +116,6 @@ class TVMRunnerBase {
     return ortTypeToDLType[type];
   }
 
-  template<typename TensorType>
-  void SetInputTensors(std::vector<TensorType>& inputs,
-                       const std::string& func_name) {
-    // arity is num of inputs + 1, because first argument to the set_input_func
-    // is the name of the function that should take those inputs.
-    size_t arity = inputs.size() + 1;
-    std::vector<TVMValue> values(arity);
-    std::vector<int> codes(arity);
-    tvm::runtime::TVMArgsSetter setter(values.data(), codes.data());
-    setter(0, func_name.c_str());
-    for (size_t k = 0; k < arity - 1; ++k) {
-    setter(k+1, &inputs[k]);
-    }
-
-    tvm::runtime::TVMRetValue rv;
-    funcs->set_input_func.CallPacked(tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
-  }
-
-  static std::unique_ptr<TVMRunnerBase> GetRunner(TVMFuncsPtr pfuncs, bool use_zero_copy) {
-    if (use_zero_copy) {
-      return std::make_unique<TVMRunnerZeroCopy>(std::move(pfuncs));
-    } else {
-      return std::make_unique<TVMRunnerCopy>(std::move(pfuncs));
-    }
-  }
   TVMFuncsPtr funcs;
   // TODO(vvchernov): define device type for specific case. define device id
   DLDevice dl_device = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
@@ -171,13 +146,30 @@ class TVMRunnerCopy : public TVMRunnerBase {
   }
 
  private:
+  void SetInputTensors(std::vector<tvm::runtime::NDArray>& inputs, const std::string& func_name) {
+    // arity is num of inputs + 1, because first argument to the set_input_func
+    // is the name of the function that should take those inputs.
+    size_t arity = inputs.size() + 1;
+    std::vector<TVMValue> values(arity);
+    std::vector<int> codes(arity);
+    tvm::runtime::TVMArgsSetter setter(values.data(), codes.data());
+
+    setter(0, func_name.c_str());
+    for (size_t k = 0; k < arity - 1; ++k) {
+      setter(k+1, inputs[k]);
+    }
+
+    tvm::runtime::TVMRetValue rv;
+    funcs->set_input_func.CallPacked(tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
+  }
+
   std::vector<tvm::runtime::NDArray> GetInputTensors(const Ort::KernelContext& ctx) {
     std::vector<tvm::runtime::NDArray> input_vec;
     {% for details in cookiecutter.inputs -%}
     auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
     const {{details.cpp_type}}* input{{details.index}}_ptr = input_tensor{{details.index}}.GetTensorData<{{details.cpp_type}}>();
     DLDataType input{{details.index}}_dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
-    tvm::runtime::NDArray input{{details.index}}_ndarray = ::tvm::runtime::NDArray::Empty({{details.shape}}, input{{details.index}}_dtype, dl_device_type);
+    tvm::runtime::NDArray input{{details.index}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, input{{details.index}}_dtype, dl_device_type);
     input{{details.index}}_ndarray.CopyFromBytes(input{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     input_vec.push_back(input{{details.index}}_ndarray);
     {% endfor %}
@@ -220,6 +212,23 @@ class TVMRunnerZeroCopy : public TVMRunnerBase {
   }
 
  private:
+  void SetInputTensors(std::vector<DLTensor>& inputs, const std::string& func_name) {
+    // arity is num of inputs + 1, because first argument to the set_input_func
+    // is the name of the function that should take those inputs.
+    size_t arity = inputs.size() + 1;
+    std::vector<TVMValue> values(arity);
+    std::vector<int> codes(arity);
+    tvm::runtime::TVMArgsSetter setter(values.data(), codes.data());
+
+    setter(0, func_name.c_str());
+    for (size_t k = 0; k < arity - 1; ++k) {
+      setter(k+1, &inputs[k]);
+    }
+
+    tvm::runtime::TVMRetValue rv;
+    funcs->set_input_func.CallPacked(tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
+  }
+
   std::vector<DLTensor> GetInputDLTensors(const Ort::KernelContext& ctx) {
     std::vector<DLTensor> ort_dl_inputs;
     {% for details in cookiecutter.inputs -%}
@@ -277,6 +286,14 @@ class TVMRunnerZeroCopy : public TVMRunnerBase {
     funcs->set_outputs_func.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
   }
 };
+
+std::unique_ptr<TVMRunnerBase> GetRunner(TVMFuncsPtr pfuncs, bool use_zero_copy) {
+  if (use_zero_copy) {
+    return std::make_unique<TVMRunnerZeroCopy>(std::move(pfuncs));
+  } else {
+    return std::make_unique<TVMRunnerCopy>(std::move(pfuncs));
+  }
+}
 
 struct TVMRuntime {
   TVMRuntime() {
@@ -360,12 +377,12 @@ struct TVMRuntime {
         .CallPacked(
             tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
 
-    TVMFuncsPtr funcs = std::make_unique<TVMFuncs>({
+    TVMFuncsPtr funcs = std::make_unique<TVMFuncs>(TVMFuncs{
       vm.GetFunction("set_input", nullptr),
       vm.GetFunction("set_outputs", nullptr),
       vm.GetFunction("invoke", nullptr)
     });
-    runner = TVMRunnerBase::GetRunner(std::move(funcs), use_zero_copy);
+    runner = GetRunner(std::move(funcs), use_zero_copy);
   }
 
   void Compute(OrtKernelContext* context) {
