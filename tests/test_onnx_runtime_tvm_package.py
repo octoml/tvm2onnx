@@ -249,9 +249,6 @@ def test_debug_build():
 @pytest.mark.parametrize("dtype_str1", _DTYPE_LIST)
 def test_cast_model(dtype_str1, dtype_str2):
     # TODO(agladyshev): investigate this issues
-    if dtype_str1 == "float64" and dtype_str2 == "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __truncdfhf2")
-
     if dtype_str1 == "float16" and dtype_str2 != "float16":
         pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_h2f_ieee")
 
