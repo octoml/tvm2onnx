@@ -93,7 +93,9 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     return c1_data, c2_data
 
 
-def run_with_custom_op(custom_op_model_name, custom_op_model_dir, input_data):
+def run_with_custom_op(
+    custom_op_model_name, custom_op_model_dir, input_data, use_zero_copy=False
+):
     import pickle
     import subprocess
 
@@ -117,6 +119,8 @@ def run_with_custom_op(custom_op_model_name, custom_op_model_dir, input_data):
             "--output_data_file",
             output_data_file_name,
         ]
+        if use_zero_copy:
+            inference_cmd.append("--use_zero_copy")
         result = subprocess.run(
             inference_cmd, cwd=os.path.join(os.path.dirname(__file__))
         )
@@ -166,11 +170,12 @@ def test_onnx_package():
         assert np.allclose(product, actual_product)
 
 
+@pytest.mark.parametrize("use_zero_copy", [False, True])
 @pytest.mark.parametrize(
     "dtype_str",
     _DTYPE_LIST,
 )
-def test_constant_model(dtype_str):
+def test_constant_model(dtype_str, use_zero_copy):
     # TODO(agladyshev): investigate this issue
     if dtype_str == "float16":
         pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_h2f_ieee")
@@ -191,6 +196,7 @@ def test_constant_model(dtype_str):
             name=custom_op_model_name,
             tvm_target="llvm",
             output_path=custom_op_tar_path,
+            use_zero_copy=use_zero_copy,
         )
         custom_op_model_dir = os.path.join(tdir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
@@ -201,7 +207,7 @@ def test_constant_model(dtype_str):
         }
 
         result = run_with_custom_op(
-            custom_op_model_name, custom_op_model_dir, input_data
+            custom_op_model_name, custom_op_model_dir, input_data, use_zero_copy
         )
 
         expected = (input_data["a"] + c1_data) * c2_data
