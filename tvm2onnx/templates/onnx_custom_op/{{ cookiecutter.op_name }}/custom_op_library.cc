@@ -152,13 +152,6 @@ class TVMRunnerBase {
     funcs->set_input_func.CallPacked(tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
   }
 
-  static std::unique_ptr<TVMRunnerBase> GetRunner(const Ort::CustomOpApi& ort, TVMFuncsPtr pfuncs, bool use_zero_copy) {
-    if (use_zero_copy) {
-      return std::make_unique<TVMRunnerZeroCopy>(ort, std::move(pfuncs));
-    } else {
-      return std::make_unique<TVMRunnerCopy>(ort, std::move(pfuncs));
-    }
-  }
   Ort::CustomOpApi ort_;
   TVMFuncsPtr funcs;
 };
@@ -295,6 +288,14 @@ class TVMRunnerZeroCopy : public TVMRunnerBase {
   }
 };
 
+std::unique_ptr<TVMRunnerBase> GetRunner(const Ort::CustomOpApi& ort, TVMFuncsPtr pfuncs, bool use_zero_copy) {
+  if (use_zero_copy) {
+    return std::make_unique<TVMRunnerZeroCopy>(ort, std::move(pfuncs));
+  } else {
+    return std::make_unique<TVMRunnerCopy>(ort, std::move(pfuncs));
+  }
+}
+
 struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
@@ -384,7 +385,7 @@ struct TVMRuntime {
       vm.GetFunction("set_outputs", nullptr),
       vm.GetFunction("invoke", nullptr)
     });
-    runner = TVMRunnerBase::GetRunner(ort_, std::move(funcs), use_zero_copy);
+    runner = GetRunner(ort_, std::move(funcs), use_zero_copy);
   }
 
   void Compute(OrtKernelContext* context) {
