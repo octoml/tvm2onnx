@@ -169,7 +169,7 @@ class TVMRunnerCopy : public TVMRunnerBase {
     auto input_tensor{{details.index}} = ctx.GetInput({{details.index}});
     const {{details.cpp_type}}* input{{details.index}}_ptr = input_tensor{{details.index}}.GetTensorData<{{details.cpp_type}}>();
     DLDataType input{{details.index}}_dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
-    tvm::runtime::NDArray input{{details.index}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, input{{details.index}}_dtype, dl_device_type);
+    tvm::runtime::NDArray input{{details.index}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, input{{details.index}}_dtype, dl_device);
     input{{details.index}}_ndarray.CopyFromBytes(input{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     input_vec.push_back(input{{details.index}}_ndarray);
     {% endfor %}
