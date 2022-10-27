@@ -257,7 +257,7 @@ class ONNXRuntimeTVMPackage:
             "domain": domain,
             "compiler": self._compiler,
             "compiler_flags": self._compiler_flags,
-            "use_zero_copy": self._use_zero_copy,
+            "use_zero_copy": str(self._use_zero_copy).lower(),
         }
 
     def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
