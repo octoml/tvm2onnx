@@ -209,3 +209,45 @@ class RelayModel:
             shape = list(map(int, shape))
             result.append(RelayTensorDetail(name=name, shape=shape, dtype=tensor.dtype))
         return result
+
+    def run(self, model_path, ro_path, inputs):
+        from tvm.runtime import vm
+        import tvm
+        from tvm import auto_scheduler, autotvm, meta_schedule, relay, rpc, target
+        from tvm.contrib import cc
+        from tvm.relay import vm
+        from tvm.runtime import vm as vm_rt
+        from tvm.tir.expr import Any
+
+        # with autotvm.apply_history_best(best_records):
+        with tvm.transform.PassContext(
+            opt_level=3,
+            config={"relay.FuseOps.max_depth": 30},
+            # instruments=[saved_tir],
+        ):
+            exec = vm.compile(
+                copy.deepcopy(self.model),
+                "llvm",
+                params=self.params,
+                # target_host=tvm_host_target_,
+            )
+
+
+        loaded_lib = tvm.module.load(model_path)
+        loaded_code = bytearray(open(ro_path, "rb").read())
+
+        # exec = vm.Executable.load_exec(loaded_code, loaded_lib)
+        relay_vm = vm.VirtualMachine(exec)
+        # relay_vm.init(tvm.cpu())
+
+        result = relay_vm.run(**inputs)
+        return result
+        # relay_vm.benchmark(
+        #     tvm.cpu(),
+        #     func_name="main",
+        #     number=1,
+        #     repeat=1,
+        #     min_repeat_ms=0,
+        #     end_to_end=True,
+        #     **inputs,
+        # )

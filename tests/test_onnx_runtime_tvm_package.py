@@ -6,6 +6,7 @@ import tempfile
 
 import numpy as np
 import onnx
+import onnxruntime
 import pytest
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
@@ -141,9 +142,11 @@ def test_onnx_package():
             tvm_target="llvm",
             output_path=custom_op_tar_path,
         )
-        custom_op_model_dir = os.path.join(tdir, "model")
+        model_dir = os.path.join(tdir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
+            tar.extractall(model_dir)
+        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
+        custom_lib = os.path.join(model_dir, "custom_test_model.so")
 
         input_data = {
             "a": np.array(
@@ -155,9 +158,17 @@ def test_onnx_package():
             ),
         }
 
-        output_data = run_with_custom_op(
-            custom_op_model_name, custom_op_model_dir, input_data
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.register_custom_ops_library(custom_lib)
+
+        session = onnxruntime.InferenceSession(
+            onnx_model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
         )
+
+        output_data = session.run(output_names=None, input_feed=input_data)
 
         sum = input_data["a"] + input_data["b"]
         product = input_data["a"] * input_data["b"]
@@ -193,17 +204,27 @@ def test_constant_model(dtype_str):
             tvm_target="llvm",
             output_path=custom_op_tar_path,
         )
-        custom_op_model_dir = os.path.join(tdir, "model")
+        model_dir = os.path.join(tdir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
+            tar.extractall(model_dir)
+        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
+        custom_lib = os.path.join(model_dir, "custom_test_model.so")
 
         input_data = {
             "a": np.random.randn(*c1_data.shape).astype(dtype),
         }
 
-        result = run_with_custom_op(
-            custom_op_model_name, custom_op_model_dir, input_data
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.register_custom_ops_library(custom_lib)
+
+        session = onnxruntime.InferenceSession(
+            onnx_model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
         )
+
+        output_data = session.run(output_names=None, input_feed=input_data)
 
         expected = (input_data["a"] + c1_data) * c2_data
         actual = result[0]
@@ -229,9 +250,11 @@ def test_debug_build():
             output_path=custom_op_tar_path,
             debug_build=True,
         )
-        custom_op_model_dir = os.path.join(tdir, "model")
+        model_dir = os.path.join(tdir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
+            tar.extractall(model_dir)
+        onnx_model_path = os.path.join(model_dir, f"{custom_op_model_name}.onnx")
+        custom_lib = os.path.join(model_dir, f"custom_{custom_op_model_name}.so")
 
         input_data = {
             "a": np.random.randn(*c1_data.shape).astype(dtype),
@@ -249,12 +272,13 @@ def test_debug_build():
 @pytest.mark.parametrize("dtype_str2", _DTYPE_LIST)
 @pytest.mark.parametrize("dtype_str1", _DTYPE_LIST)
 def test_cast_model(dtype_str1, dtype_str2):
+    print(f"cast {dtype_str1} -> {dtype_str2}")
     # TODO(agladyshev): investigate this issues
-    if dtype_str1 == "float16" and dtype_str2 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_h2f_ieee")
+    if dtype_str1 == "float64" and dtype_str2 == "float16":
+        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __truncdfhf2")
 
-    if dtype_str2 == "float16" and dtype_str1 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee")
+    # if dtype_str2 == "float16" and dtype_str1 != "float16":
+    #     pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee")
 
     shape = (1, 2, 3, 4)
     dtype1 = np.dtype(dtype_str1)
@@ -292,22 +316,33 @@ def test_cast_model(dtype_str1, dtype_str2):
         relay_model = RelayModel.from_onnx(
             onnx.load(source_model_path), dynamic_axis_substitute=1
         )
+        # relay_model.run()
         relay_model.package_to_onnx(
             name=custom_op_model_name,
-            tvm_target="llvm",
+            tvm_target="cuda",
             output_path=custom_op_tar_path,
         )
 
         # Extract Custom Op ONNX file and Custom Op shared library
-        custom_op_model_dir = os.path.join(temp_dir, "model")
+        model_dir = os.path.join(temp_dir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
+            tar.extractall(model_dir)
+        onnx_model_path = os.path.join(model_dir, f"{custom_op_model_name}.onnx")
+        custom_lib = os.path.join(model_dir, f"custom_{custom_op_model_name}.so")
+
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.register_custom_ops_library(custom_lib)
+
+        session = onnxruntime.InferenceSession(
+            onnx_model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
+        )
 
         # Run inference
         input_data = {
             "input": np.random.randn(*shape).astype(dtype1),
         }
-        output = run_with_custom_op(
-            custom_op_model_name, custom_op_model_dir, input_data
-        )
-        assert output[0].dtype == dtype2
+        output_data = session.run(output_names=None, input_feed=input_data)
+        assert output_data[0].dtype == dtype2

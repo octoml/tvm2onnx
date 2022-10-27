@@ -86,7 +86,7 @@ ENV PATH=/usr/local/cuda/bin:/usr/local/nvidia/bin:${PATH}
 # GCP: /usr/local/nvidia/lib64 (already present in LD_LIBRARY_PATH)
 # AWS: /usr/lib/x86_64-linux-gnu (must be added earlier than /usr/local/cuda/compat/lib.real)
 #
-ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/compat/lib.real:/opt/intel/openvino_2021/inference_engine/lib/intel64/:/opt/intel/openvino_2021.4.689/deployment_tools/ngraph/lib/:/opt/intel/openvino_2021.4.689/deployment_tools/inference_engine/external/tbb/lib/
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/compat/lib.real
 
 COPY . /usr/tvm2onnx
 WORKDIR /usr/tvm2onnx
