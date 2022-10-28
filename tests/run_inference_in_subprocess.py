@@ -194,7 +194,7 @@ def main():
         args.custom_op_model_name,
         args.custom_op_model_dir,
         input_data,
-        True if args.use_zero_copy else False,
+        args.use_zero_copy,
     )
 
     with open(args.output_data_file, "wb") as output_data_file:
