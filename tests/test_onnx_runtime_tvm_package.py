@@ -95,41 +95,6 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     return c1_data, c2_data
 
 
-def run_with_custom_op(custom_op_model_name, custom_op_model_dir, input_data):
-    import pickle
-    import subprocess
-
-    with tempfile.TemporaryDirectory() as temp_directory:
-        input_data_file_name = os.path.join(temp_directory, "input_data")
-        output_data_file_name = os.path.join(temp_directory, "output_data")
-
-        with open(input_data_file_name, "wb") as input_data_file:
-            serialized_input_data = pickle.dumps(input_data)
-            input_data_file.write(serialized_input_data)
-
-        inference_cmd = [
-            sys.executable,
-            "run_inference_in_subprocess.py",
-            "--custom_op_model_name",
-            custom_op_model_name,
-            "--custom_op_model_dir",
-            custom_op_model_dir,
-            "--input_data_file",
-            input_data_file_name,
-            "--output_data_file",
-            output_data_file_name,
-        ]
-        result = subprocess.run(
-            inference_cmd, cwd=os.path.join(os.path.dirname(__file__))
-        )
-        assert result.returncode == 0
-
-        with open(output_data_file_name, "rb") as output_data_file:
-            output_data = pickle.loads(output_data_file.read())
-
-    return output_data
-
-
 def test_onnx_package():
     with tempfile.TemporaryDirectory() as tdir:
         relay_model = RelayModel.from_onnx(
@@ -280,11 +245,14 @@ def test_debug_build():
 @pytest.mark.parametrize("dtype_str1", _DTYPE_LIST)
 def test_cast_model(dtype_str1, dtype_str2):
     # TODO(agladyshev): investigate this issues
-    if dtype_str1 == "float64" and dtype_str2 == "float16":
+    if dtype_str1 == "float16" and dtype_str2 != "float16":
         pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __truncdfhf2")
 
     if dtype_str2 == "float16" and dtype_str1 != "float16":
         pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee")
+
+    if dtype_str1 == "float64" and dtype_str2 == "float16":
+        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __truncdfhf2")
 
     shape = (1, 2, 3, 4)
     dtype1 = np.dtype(dtype_str1)
