@@ -1,5 +1,6 @@
 """Tests ONNX Packaging."""
 import os
+import sys
 import tarfile
 import tempfile
 
@@ -106,7 +107,7 @@ def run_with_custom_op(custom_op_model_name, custom_op_model_dir, input_data):
             input_data_file.write(serialized_input_data)
 
         inference_cmd = [
-            "python",
+            sys.executable,
             "run_inference_in_subprocess.py",
             "--custom_op_model_name",
             custom_op_model_name,
