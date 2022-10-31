@@ -289,7 +289,6 @@ def test_cast_model(dtype_str1, dtype_str2):
         relay_model = RelayModel.from_onnx(
             onnx.load(source_model_path), dynamic_axis_substitute=1
         )
-        # relay_model.run()
         relay_model.package_to_onnx(
             name=custom_op_model_name,
             tvm_target="llvm",
