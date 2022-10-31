@@ -1,6 +1,5 @@
 """Tests ONNX Packaging."""
 import os
-import sys
 import tarfile
 import tempfile
 
