@@ -124,6 +124,7 @@ class RelayModel:
         output_path: pathlib.Path,
         metadata: typing.Dict[str, str] = {},
         debug_build: bool = False,
+        use_zero_copy: bool = False,
     ):
         """Builds the ONNX file and returns the path to the package.
 
@@ -184,6 +185,7 @@ class RelayModel:
                 dl_device_type="kDLCUDA" if "cuda" in tvm_target else "kDLCPU",
                 metadata=metadata,
                 compiler_flags=" ".join(compiler_flags),
+                use_zero_copy=use_zero_copy,
             )
             onnx_tar = packager.build_package(tdir_path)
             shutil.move(str(onnx_tar), str(output_path))

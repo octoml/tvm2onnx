@@ -110,6 +110,7 @@ class ONNXRuntimeTVMPackage:
         metadata: typing.Dict[str, str] = {},
         compiler: str = "g++",
         compiler_flags: str = "",
+        use_zero_copy: bool = False,
     ):
         """Initializes a new package.
 
@@ -125,6 +126,8 @@ class ONNXRuntimeTVMPackage:
         :param dl_device_type: the DLDeviceType
         :param compiler: the name of the compiler to use
         :param compiler_flags: additional compiler flags to pass
+        :param use_zero_copy:
+            the flag that enables build of custom op using zero copy method for output tensors
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
@@ -139,6 +142,7 @@ class ONNXRuntimeTVMPackage:
         self._metadata = metadata
         self._compiler = compiler
         self._compiler_flags = compiler_flags
+        self._use_zero_copy = use_zero_copy
 
     @property
     def template_dir(self):
@@ -255,6 +259,7 @@ class ONNXRuntimeTVMPackage:
             "domain": domain,
             "compiler": self._compiler,
             "compiler_flags": self._compiler_flags,
+            "use_zero_copy": str(self._use_zero_copy).lower(),
         }
 
     def build_package(self, build_dir: pathlib.Path) -> pathlib.Path:
