@@ -126,6 +126,8 @@ class ONNXRuntimeTVMPackage:
         :param dl_device_type: the DLDeviceType
         :param compiler: the name of the compiler to use
         :param compiler_flags: additional compiler flags to pass
+        :param use_zero_copy:
+            the flag that enables build of custom op using zero copy method for output tensors
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
