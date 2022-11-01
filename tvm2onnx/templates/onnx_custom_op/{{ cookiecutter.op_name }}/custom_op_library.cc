@@ -410,7 +410,7 @@ struct TVMRuntime {
 };
 
 struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
-  void* CreateKernel(const OrtApi& /* api */, const OrtKernelInfo* /* info */) const {
+  void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info) const {
     return new TVMRuntime();
   };
 
