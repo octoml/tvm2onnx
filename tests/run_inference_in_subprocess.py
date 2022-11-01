@@ -46,18 +46,18 @@ def get_output_meta(
 
 
 # TODO(agladyshev): We need to find a more correct way to align memory instead of this workaround.
-def get_aligned_buffer(source_buffer: np.ndarray, alignment: int = 128):
-    if (source_buffer.ctypes.data % alignment) == 0:
+def get_aligned_buffer(source_buffer: np.ndarray, alignment_in_bits: int = 128):
+    if (source_buffer.ctypes.data % alignment_in_bits) == 0:
         return source_buffer
-    assert alignment % source_buffer.itemsize == 0
-    extra = alignment // source_buffer.itemsize
+    assert alignment_in_bits % source_buffer.itemsize == 0
+    extra = alignment_in_bits // source_buffer.itemsize
     temp_buffer = np.empty(source_buffer.size + extra, dtype=source_buffer.dtype)
-    offset = (-temp_buffer.ctypes.data % alignment) // source_buffer.itemsize
+    offset = (-temp_buffer.ctypes.data % alignment_in_bits) // source_buffer.itemsize
     aligned_buffer = temp_buffer[offset : offset + source_buffer.size].reshape(
         source_buffer.shape
     )
     np.copyto(aligned_buffer, source_buffer)
-    assert aligned_buffer.ctypes.data % alignment == 0
+    assert aligned_buffer.ctypes.data % alignment_in_bits == 0
     return aligned_buffer
 
 
