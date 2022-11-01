@@ -245,13 +245,14 @@ def test_debug_build():
 def test_cast_model(dtype_str1, dtype_str2):
     # TODO(agladyshev): investigate this issues
     if dtype_str1 == "float16" and dtype_str2 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __truncdfhf2")
+        pytest.skip(
+            "/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee or __truncdfhf2"
+        )
 
     if dtype_str2 == "float16" and dtype_str1 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee")
-
-    if dtype_str1 == "float64" and dtype_str2 == "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __truncdfhf2")
+        pytest.skip(
+            "/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee or __truncdfhf2"
+        )
 
     shape = (1, 2, 3, 4)
     dtype1 = np.dtype(dtype_str1)
