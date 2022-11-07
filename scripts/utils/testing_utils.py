@@ -1,7 +1,7 @@
-"""Running inference in a subprocess to avoid dependency on libtvm.so"""
-import argparse
+"""Testing utilities"""
+import inspect
 import os
-import pickle
+import tarfile
 import typing
 
 import numpy as np
@@ -158,49 +158,30 @@ def get_ort_output(
     return output
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run inference for Custom Op.")
-    parser.add_argument(
-        "--custom_op_model_name",
-        required=True,
-        help="Name of the model.",
-    )
-    parser.add_argument(
-        "--custom_op_model_dir",
-        required=True,
-        help="Directory with ONNX file and Custom Op shared library.",
-    )
-    parser.add_argument(
-        "--input_data_file",
-        required=True,
-        help="Serialized input dictionary.",
-    )
-    parser.add_argument(
-        "--output_data_file",
-        required=True,
-        help="Serialized output",
-    )
-    parser.add_argument(
-        "--use_zero_copy",
-        action="store_true",
-        help="Use zero_copy methods for TVM and IOBinding mechanism for ORT",
-    )
-    args = parser.parse_args()
+def package_model_and_extract_tar(
+    custom_op_tar_path: str, custom_op_model_dir: str, **all_kwargs
+) -> None:
+    from scripts.utils.relay_model import RelayModel
 
-    with open(args.input_data_file, "rb") as input_data_file:
-        input_data = pickle.loads(input_data_file.read())
+    def get_function_parameters(func: typing.Callable) -> typing.List[str]:
+        return [
+            param.name for param in list(inspect.signature(func).parameters.values())
+        ]
 
-    output_data = get_ort_output(
-        args.custom_op_model_name,
-        args.custom_op_model_dir,
-        input_data,
-        args.use_zero_copy,
-    )
+    def get_func_kwargs(func: typing.Callable) -> typing.Dict:
+        parameters = get_function_parameters(func)
+        call_dict = {
+            key: all_kwargs[key] for key in parameters if key in all_kwargs.keys()
+        }
+        call_args = inspect.getcallargs(func, **call_dict)
+        if "cls" in call_args.keys():
+            del call_args["cls"]
+        if "self" in call_args.keys():
+            del call_args["self"]
+        return call_args
 
-    with open(args.output_data_file, "wb") as output_data_file:
-        serialized_output_data = pickle.dumps(output_data)
-        output_data_file.write(serialized_output_data)
+    relay_model = RelayModel.from_onnx(**get_func_kwargs(RelayModel.from_onnx))
+    relay_model.package_to_onnx(**get_func_kwargs(relay_model.package_to_onnx))
 
-
-if __name__ == "__main__":
-    main()
+    with tarfile.open(custom_op_tar_path, "r") as tar:
+        tar.extractall(custom_op_model_dir)
