@@ -164,6 +164,7 @@ class RelayModel:
                 f"-I{include}" for include in get_tvm_includes() + get_ort_includes()
             ]
             compiler_flags.append("-lpthread")
+            compiler_flags.append("-fPIC")
             if "cuda" in tvm_target:
                 compiler_flags.append("-lcuda")
                 compiler_flags.append("-lcudart")

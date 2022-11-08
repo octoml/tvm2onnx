@@ -15,7 +15,6 @@ custom_{{cookiecutter.module_name}}.so: custom_op_library.cc model.h vm_exec_cod
 		-shared \
 		-Iinclude \
 		-I. \
-		-fPIC \
 		-O2 \
 		-o custom_{{cookiecutter.module_name}}.so \
 		custom_op_library.cc \
