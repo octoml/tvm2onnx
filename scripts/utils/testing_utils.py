@@ -1,11 +1,38 @@
 """Testing utilities"""
 import inspect
 import os
+import pickle
+import subprocess
+import sys
 import tarfile
+import tempfile
+import textwrap
 import typing
 
+import decorator
 import numpy as np
 import onnxruntime
+
+
+@decorator.decorator
+def subprocessable(f, *args, **kwargs):
+    def is_picklable(obj):
+        try:
+            pickle.dumps(obj)
+        except pickle.PicklingError:
+            return False
+        return True
+
+    def have_return_value(obj):
+        return inspect.signature(obj).return_annotation
+
+    if not is_picklable((args, kwargs)):
+        raise TypeError(f"All parameters of {f} must be picklable.")
+
+    if have_return_value(f):
+        raise TypeError(f"Function {f} must not have a return value.")
+
+    return f(*args, **kwargs)
 
 
 def get_io_meta(
@@ -158,6 +185,64 @@ def get_ort_output(
     return output
 
 
+def run_func_in_subprocess(func: subprocessable, *args, **kwargs):
+    with tempfile.TemporaryDirectory() as temp_directory:
+        input_data_file_name = os.path.join(temp_directory, "input_data")
+        run_in_subprocess_file_name = os.path.join(
+            temp_directory, "run_in_subprocess.py"
+        )
+
+        with open(input_data_file_name, "wb") as input_data_file:
+            serialized_input_data = pickle.dumps((args, kwargs))
+            input_data_file.write(serialized_input_data)
+
+        module_name = inspect.getmodule(func).__name__
+        func_name = func.__name__
+        with open(run_in_subprocess_file_name, "w") as run_in_subprocess_file:
+            # TODO(agladyshev): inspect.findsource can be used to find all required imports.
+            run_in_subprocess_file.write(
+                textwrap.dedent(
+                    f"""
+                    import pickle
+                    import argparse
+
+                    import {module_name}
+
+
+                    def main():
+                        parser = argparse.ArgumentParser()
+                        parser.add_argument(
+                            "--input_data_file",
+                            required=True,
+                        )
+                        args = parser.parse_args()
+
+                        with open(args.input_data_file, "rb") as input_data_file:
+                            args, kwargs = pickle.loads(input_data_file.read())
+
+                        {module_name}.{func_name}(*args, **kwargs)
+
+
+                    if __name__ == '__main__':
+                        main()
+
+                    """
+                )
+            )
+
+        inference_cmd = [
+            sys.executable,
+            run_in_subprocess_file_name,
+            "--input_data_file",
+            input_data_file_name,
+        ]
+        result = subprocess.run(
+            inference_cmd,
+        )
+        assert result.returncode == 0
+
+
+@subprocessable
 def package_model_and_extract_tar(
     custom_op_tar_path: str, custom_op_model_dir: str, **all_kwargs
 ) -> None:
