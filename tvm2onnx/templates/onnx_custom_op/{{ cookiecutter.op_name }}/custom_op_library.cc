@@ -83,6 +83,7 @@ class TempFile {
   TempFile() {
     char tmp_buf[L_tmpnam];
     if (tmpnam(tmp_buf)) {
+      // TVM needs the filename to end in .so or .dll, it does not matter which
       filename = std::string(tmp_buf) + ".so";
     } else {
       std::cerr << "ERROR: Can't create temporary file" << std::endl;
