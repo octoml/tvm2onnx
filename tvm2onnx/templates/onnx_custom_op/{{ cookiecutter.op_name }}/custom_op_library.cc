@@ -81,13 +81,12 @@ struct OrtTensorDimensions : std::vector<int64_t> {
 class TempFile {
   public:
   TempFile() {
-    std::string tmp_path = std::filesystem::temp_directory_path();
-    tmp_path = tmp_path + "/tvm_model_XXXXXX.so";
-    // +1 for the null terminator
-    auto tmp_buffer = std::unique_ptr<char[]>(new char[tmp_path.size()+1]);
-    strcpy(tmp_buffer.get(), tmp_path.c_str());
-    mkstemps(tmp_buffer.get(), 3);
-    filename = std::string(tmp_buffer.get());
+    char tmp_buf[L_tmpnam];
+    if (tmpnam(tmp_buf)) {
+      filename = std::string(tmp_buf);
+    } else {
+      std::cerr << "ERROR: Can't create temporary file" << std::endl;
+    }
   }
 
   ~TempFile() {
