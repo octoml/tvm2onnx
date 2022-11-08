@@ -142,8 +142,8 @@ class RelayModel:
             )
 
             constants_map = {
-                name: data.numpy()
-                for name, data in vm_exec.get_late_bound_consts(1024).items()
+                const_name: data.numpy()
+                for const_name, data in vm_exec.get_late_bound_consts(1024).items()
             }
 
             # Save vm exec code bytes.

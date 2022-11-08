@@ -21,12 +21,12 @@
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/vm/vm.h>
 
-extern uint8_t vm_exec_code_ro_start[] asm("_binary_vm_exec_code_ro_start");
-extern uint8_t vm_exec_code_ro_end[] asm("_binary_vm_exec_code_ro_end");
-extern const char model_so_start[] asm("_binary_model_so_start");
-extern const char model_so_end[] asm("_binary_model_so_end");
-
 namespace {
+
+// These two included are generated as part of the build
+#include "model_so.h"
+#include "vm_exec_code_ro.h"
+
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
 static ONNXTensorElementDataType GetInputType(size_t index) {
@@ -322,23 +322,18 @@ std::unique_ptr<TVMRunnerBase> GetRunner(const Ort::CustomOpApi& ort, TVMFuncsPt
 struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
-    // Binary data is linked into this shared library
-    // These symbols are defined by adding lines like this to the compile string
-    // -Wl,--format=binary -Wl,vm_exec_code.ro -Wl,--format=default
-    size_t vm_exec_code_ro_size = vm_exec_code_ro_end - vm_exec_code_ro_start;
-    size_t model_so_size = model_so_end - model_so_start;
 
     use_zero_copy = {{ cookiecutter.use_zero_copy }};
 
     // TVM's model shared library needs to be a standalone shared lib
     std::ofstream model_so_f(model_so_file.filename, std::ios::binary);
-    model_so_f.write(model_so_start, model_so_size);
+    model_so_f.write((const char*)MODEL_SO, MODEL_SO_LEN);
     model_so_f.close();
     tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(model_so_file.filename);
 
     // Copy vm_exec_code to a string for TVM consumption.
     std::stringstream ss;
-    ss.write((const char*)&vm_exec_code_ro_start, vm_exec_code_ro_size);
+    ss.write((const char*)&VM_EXEC_CODE_RO, VM_EXEC_CODE_RO_LEN);
 
     exec_mod = tvm::runtime::vm::Executable::Load(ss.str(), lib);
     const tvm::runtime::vm::Executable* tmp =
