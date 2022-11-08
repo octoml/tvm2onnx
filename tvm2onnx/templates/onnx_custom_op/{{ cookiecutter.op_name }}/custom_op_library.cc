@@ -83,7 +83,7 @@ class TempFile {
   TempFile() {
     char tmp_buf[L_tmpnam];
     if (tmpnam(tmp_buf)) {
-      filename = std::string(tmp_buf);
+      filename = std::string(tmp_buf) + ".so";
     } else {
       std::cerr << "ERROR: Can't create temporary file" << std::endl;
     }
