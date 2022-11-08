@@ -3,7 +3,6 @@ import logging
 import os
 
 import pytest
-import tvm
 
 logging.captureWarnings(True)
 
@@ -32,6 +31,9 @@ def pytest_runtest_setup(item):
         if marker.name == "cuda" and int(os.getenv("FORCE_CUDA", 0)) == 0:
             try:
                 # This is just to check if CUDA is available.
+                # TODO(agladyshev): find another way to check, without import tvm
+                import tvm
+
                 tvm.cuda().compute_version
             except (ImportError, Exception):
                 pytest.skip("PyCuda not installed or no CUDA device detected")
