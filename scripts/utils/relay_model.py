@@ -142,8 +142,8 @@ class RelayModel:
             )
 
             constants_map = {
-                name: data.numpy()
-                for name, data in vm_exec.get_late_bound_consts(1024).items()
+                const_name: data.numpy()
+                for const_name, data in vm_exec.get_late_bound_consts(1024).items()
             }
 
             # Save vm exec code bytes.
@@ -164,6 +164,7 @@ class RelayModel:
                 f"-I{include}" for include in get_tvm_includes() + get_ort_includes()
             ]
             compiler_flags.append("-lpthread")
+            compiler_flags.append("-fPIC")
             if "cuda" in tvm_target:
                 compiler_flags.append("-lcuda")
                 compiler_flags.append("-lcudart")
