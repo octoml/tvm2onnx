@@ -15,7 +15,10 @@ from onnx.helper import (
 )
 from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 
-from scripts.utils.testing_utils import get_ort_output, package_model_and_extract_tar
+import scripts.utils.testing_utils as testing
+
+packaging_function = testing.package_model_and_extract_tar
+inference_function = testing.get_ort_output
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 
@@ -99,7 +102,7 @@ def test_onnx_package():
         custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
         custom_op_model_dir = os.path.join(tdir, "model")
 
-        package_model_and_extract_tar(
+        packaging_function(
             custom_op_tar_path,
             custom_op_model_dir,
             onnx_model=onnx.load(_MODEL_PATH),
@@ -120,7 +123,7 @@ def test_onnx_package():
             ),
         }
 
-        output_data = get_ort_output(
+        output_data = inference_function(
             custom_op_model_name, custom_op_model_dir, input_data
         )
 
@@ -138,7 +141,6 @@ def test_onnx_package():
     "dtype_str",
     _DTYPE_LIST,
 )
-
 def test_constant_model(dtype_str, use_zero_copy, debug_build):
     dtype = np.dtype(dtype_str)
     input_shape = [8, 3, 224, 224]
@@ -154,7 +156,7 @@ def test_constant_model(dtype_str, use_zero_copy, debug_build):
         custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
         custom_op_model_dir = os.path.join(tdir, "model")
 
-        package_model_and_extract_tar(
+        packaging_function(
             custom_op_tar_path,
             custom_op_model_dir,
             onnx_model=onnx.load(model_path),
@@ -171,7 +173,7 @@ def test_constant_model(dtype_str, use_zero_copy, debug_build):
             "a": np.random.randn(*c1_data.shape).astype(dtype),
         }
 
-        result = get_ort_output(
+        result = inference_function(
             custom_op_model_name, custom_op_model_dir, input_data, use_zero_copy
         )
 
@@ -185,7 +187,6 @@ _FLOAT_DTYPE_LIST = [
     "float32",
     "float64",
 ]
-
 
 @pytest.mark.parametrize("dtype_str2", _FLOAT_DTYPE_LIST)
 @pytest.mark.parametrize("dtype_str1", _FLOAT_DTYPE_LIST)
@@ -229,7 +230,7 @@ def test_cast_model(dtype_str1, dtype_str2):
         custom_op_tar_path = os.path.join(temp_dir, f"{custom_op_model_name}.onnx")
         custom_op_model_dir = os.path.join(temp_dir, "model")
 
-        package_model_and_extract_tar(
+        packaging_function(
             custom_op_tar_path,
             custom_op_model_dir,
             onnx_model=onnx.load(source_model_path),
@@ -243,5 +244,7 @@ def test_cast_model(dtype_str1, dtype_str2):
         input_data = {
             "input": np.random.randn(*shape).astype(dtype1),
         }
-        output = get_ort_output(custom_op_model_name, custom_op_model_dir, input_data)
+        output = inference_function(
+            custom_op_model_name, custom_op_model_dir, input_data
+        )
         assert output[0].dtype == dtype2

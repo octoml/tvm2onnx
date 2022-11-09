@@ -185,7 +185,7 @@ def get_ort_output(
     return output
 
 
-def run_func_in_subprocess(func: subprocessable, *args, **kwargs):
+def run_func_in_subprocess(func: subprocessable, *args, **kwargs) -> None:
     with tempfile.TemporaryDirectory() as temp_directory:
         input_data_file_name = os.path.join(temp_directory, "input_data")
         run_in_subprocess_file_name = os.path.join(
