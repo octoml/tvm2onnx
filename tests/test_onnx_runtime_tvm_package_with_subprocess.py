@@ -8,7 +8,7 @@ import pytest
 
 import scripts.utils.testing_utils
 import tests.test_onnx_runtime_tvm_package
-from tests.test_onnx_runtime_tvm_package import *
+from tests.test_onnx_runtime_tvm_package import *  # noqa: F403, F401
 
 
 @scripts.utils.testing_utils.subprocessable

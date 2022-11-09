@@ -185,7 +185,7 @@ def get_ort_output(
     return output
 
 
-def run_func_in_subprocess(func: subprocessable, *args, **kwargs) -> None:
+def run_func_in_subprocess(func, *args, **kwargs) -> None:
     with tempfile.TemporaryDirectory() as temp_directory:
         input_data_file_name = os.path.join(temp_directory, "input_data")
         run_in_subprocess_file_name = os.path.join(
@@ -196,7 +196,10 @@ def run_func_in_subprocess(func: subprocessable, *args, **kwargs) -> None:
             serialized_input_data = pickle.dumps((args, kwargs))
             input_data_file.write(serialized_input_data)
 
-        module_name = inspect.getmodule(func).__name__
+        module = inspect.getmodule(func)
+        if not module:
+            raise RuntimeError(f"Module for {func} not found.")
+        module_name = module.__name__
         func_name = func.__name__
         with open(run_in_subprocess_file_name, "w") as run_in_subprocess_file:
             # TODO(agladyshev): inspect.findsource can be used to find all required imports.
