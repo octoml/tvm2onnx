@@ -18,8 +18,9 @@ custom_{{cookiecutter.module_name}}.so: custom_op_library.cc model.h vm_exec_cod
 		-O2 \
 		-o custom_{{cookiecutter.module_name}}.so \
 		custom_op_library.cc \
-		-Wl,--exclude-libs,ALL \
 		-Wl,--whole-archive {{cookiecutter.libtvm_runtime_a}} -Wl,--no-whole-archive \
 		-L. \
 		-std=c++17 \
-		$(FLAGS) {{cookiecutter.compiler_flags}}
+		-stdlib=libc++ \
+		-lc++abi \
+		$(FLAGS) {{cookiecutter.compiler_flags}} \

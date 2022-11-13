@@ -20,6 +20,7 @@
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/vm/vm.h>
+#include <tvm/runtime/builtin_fp16.h>
 
 namespace {
 

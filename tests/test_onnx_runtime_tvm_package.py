@@ -252,19 +252,19 @@ def test_debug_build():
         assert np.allclose(expected, actual)
 
 
-@pytest.mark.parametrize("dtype_str2", _DTYPE_LIST)
-@pytest.mark.parametrize("dtype_str1", _DTYPE_LIST)
+_DTYPE_FLIST = [
+    "float16",
+    # "float32",
+    # "float64",
+]
+
+@pytest.mark.parametrize("dtype_str1", _DTYPE_FLIST)
+@pytest.mark.parametrize("dtype_str2", _DTYPE_FLIST)
 def test_cast_model(dtype_str1, dtype_str2):
-    # TODO(agladyshev): investigate this issues
-    if dtype_str1 == "float16" and dtype_str2 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_h2f_ieee")
-
-    if dtype_str2 == "float16" and dtype_str1 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee")
-
     shape = (1, 2, 3, 4)
     dtype1 = np.dtype(dtype_str1)
     dtype2 = np.dtype(dtype_str2)
+    print(f"dtype1={dtype_str1} dtype2={dtype_str2}")
 
     def make_cast_model(model_shape, input_dtype, output_dtype, save_path):
         input_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype(input_dtype)]

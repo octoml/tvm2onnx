@@ -108,7 +108,7 @@ class ONNXRuntimeTVMPackage:
         output_dtypes: InputDtypes,
         dl_device_type: str,
         metadata: typing.Dict[str, str] = {},
-        compiler: str = "g++",
+        compiler: str = "clang++-10",
         compiler_flags: str = "",
         use_zero_copy: bool = False,
     ):
