@@ -21,6 +21,4 @@ custom_{{cookiecutter.module_name}}.so: custom_op_library.cc model.h vm_exec_cod
 		-Wl,--whole-archive {{cookiecutter.libtvm_runtime_a}} -Wl,--no-whole-archive \
 		-L. \
 		-std=c++17 \
-		-stdlib=libc++ \
-		-lc++abi \
 		$(FLAGS) {{cookiecutter.compiler_flags}} \

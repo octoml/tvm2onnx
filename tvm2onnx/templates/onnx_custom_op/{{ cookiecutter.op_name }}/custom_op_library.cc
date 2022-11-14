@@ -22,6 +22,8 @@
 #include <tvm/runtime/vm/vm.h>
 #include <tvm/runtime/builtin_fp16.h>
 
+extern float __gnu_h2f_ieee(uint16_t);
+
 namespace {
 
 // These two included are generated as part of the build

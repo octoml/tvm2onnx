@@ -254,17 +254,15 @@ def test_debug_build():
 
 _DTYPE_FLIST = [
     "float16",
-    # "float32",
+    "float32",
     # "float64",
 ]
 
-@pytest.mark.parametrize("dtype_str1", _DTYPE_FLIST)
-@pytest.mark.parametrize("dtype_str2", _DTYPE_FLIST)
-def test_cast_model(dtype_str1, dtype_str2):
+def test_cast_model():
     shape = (1, 2, 3, 4)
-    dtype1 = np.dtype(dtype_str1)
-    dtype2 = np.dtype(dtype_str2)
-    print(f"dtype1={dtype_str1} dtype2={dtype_str2}")
+    dtype1 = np.dtype("float16")
+    dtype2 = np.dtype("float32")
+    # print(f"dtype1={dtype_str1} dtype2={dtype_str2}")
 
     def make_cast_model(model_shape, input_dtype, output_dtype, save_path):
         input_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype(input_dtype)]
