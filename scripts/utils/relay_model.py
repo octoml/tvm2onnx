@@ -14,9 +14,9 @@ import typing
 import onnx
 import tvm
 from tvm import relay
+from tvm.contrib import cc
 from tvm.relay import vm
 from tvm.tir.expr import Any
-from tvm.contrib import cc
 
 from tvm2onnx import inputs
 from tvm2onnx.error import TVM2ONNXError
@@ -119,20 +119,16 @@ class RelayModel:
         )
 
     def create_archive(output, objects, options=None, cc=None):
-    #     cmd = 
-    #     if isinstance(objects, str):
-    #         cmd += [objects]
-    #     else:
-    #         cmd += objects
         cc = cc or tvm.contrib.cc.get_cc()
 
         if tvm.contrib.cc._is_linux_like():
-            tvm.contrib.cc._linux_compile(output, objects, options, cc, compile_shared=False)
+            tvm.contrib.cc._linux_compile(
+                output, objects, options, cc, compile_shared=False
+            )
         elif sys.platform == "win32":
             tvm.contrib.cc._windows_compile(output, objects, options)
         else:
             raise ValueError("Unsupported platform")
-
 
     def package_to_onnx(
         self,
@@ -172,7 +168,9 @@ class RelayModel:
             model_lib_path = tdir_path / "model.o"
 
             # Save module.
-            mod.export_library(str(model_lib_path), RelayModel.create_archive, options=["-r"])
+            mod.export_library(
+                str(model_lib_path), RelayModel.create_archive, options=["-r"]
+            )
 
             libtvm_runtime = get_runtime_path()
             outputs = self.get_outputs()

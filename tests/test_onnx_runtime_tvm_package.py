@@ -269,6 +269,7 @@ _DTYPE_FLIST = [
     # "float64",
 ]
 
+
 def test_cast_model():
     shape = (1, 2, 3, 4)
     dtype1 = np.dtype("float16")
