@@ -14,6 +14,7 @@
 #include <regex>
 #include <filesystem>
 #include <memory>
+#include <dlfcn.h>
 
 #include <dlpack/dlpack.h>
 #include <tvm/runtime/container/adt.h>
@@ -27,10 +28,11 @@ extern float __gnu_h2f_ieee(uint16_t);
 namespace {
 
 // These two included are generated as part of the build
-#include "model_so.h"
 #include "vm_exec_code_ro.h"
 
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
+
+extern "C" void dummy_func() {}
 
 static ONNXTensorElementDataType GetInputType(size_t index) {
   static ONNXTensorElementDataType input_types[] = {
@@ -326,23 +328,39 @@ struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
 
+  Dl_info info;
+  std::string my_path;
+  if (dladdr((const char*)dummy_func, &info))
+  {
+    my_path = info.dli_fname;
+    std::cout << "Loaded from path = " << my_path << std::endl;
+  }
+  else
+  {
+    std::cout << "Failed to locate self\n";
+  }
+
     use_zero_copy = {{ cookiecutter.use_zero_copy }};
 
     // TVM's model shared library needs to be a standalone shared lib
-    std::ofstream model_so_f(model_so_file.filename, std::ios::binary);
-    model_so_f.write((const char*)MODEL_SO, MODEL_SO_LEN);
-    model_so_f.close();
-    tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(model_so_file.filename);
-
+    // std::ofstream model_so_f(model_so_file.filename, std::ios::binary);
+    // model_so_f.write((const char*)MODEL_SO, MODEL_SO_LEN);
+    // model_so_f.close();
+    tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(my_path);
+    // tvm::runtime::Module lib = (*tvm::runtime::Registry::Get("runtime.SystemLib"))();
+    std::cout << __FILE__ << " " << __LINE__ << std::endl;
     // Copy vm_exec_code to a string for TVM consumption.
     std::stringstream ss;
     ss.write((const char*)&VM_EXEC_CODE_RO, VM_EXEC_CODE_RO_LEN);
 
     exec_mod = tvm::runtime::vm::Executable::Load(ss.str(), lib);
+    std::cout << __FILE__ << " " << __LINE__ << std::endl;
     const tvm::runtime::vm::Executable* tmp =
         exec_mod.as<tvm::runtime::vm::Executable>();
+    std::cout << __FILE__ << " " << __LINE__ << std::endl;
     exec = tvm::runtime::GetObjectPtr<tvm::runtime::vm::Executable>(
         const_cast<tvm::runtime::vm::Executable*>(tmp));
+    std::cout << __FILE__ << " " << __LINE__ << std::endl;
   }
 
   ~TVMRuntime() {

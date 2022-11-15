@@ -6,6 +6,7 @@ import tempfile
 
 import numpy as np
 import onnx
+import onnxruntime
 import pytest
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
@@ -145,9 +146,11 @@ def test_onnx_package():
             tvm_target="llvm",
             output_path=custom_op_tar_path,
         )
-        custom_op_model_dir = os.path.join(tdir, "model")
+        model_dir = os.path.join(tdir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
+            tar.extractall(model_dir)
+        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
+        custom_lib = os.path.join(model_dir, "custom_test_model.so")
 
         input_data = {
             "a": np.array(
@@ -159,9 +162,17 @@ def test_onnx_package():
             ),
         }
 
-        output_data = run_with_custom_op(
-            custom_op_model_name, custom_op_model_dir, input_data
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.register_custom_ops_library(custom_lib)
+
+        session = onnxruntime.InferenceSession(
+            onnx_model_path,
+            providers=["CPUExecutionProvider"],
+            provider_options=[{}],
+            sess_options=sess_options,
         )
+
+        output_data = session.run(output_names=None, input_feed=input_data)
 
         sum = input_data["a"] + input_data["b"]
         product = input_data["a"] * input_data["b"]
@@ -195,7 +206,7 @@ def test_constant_model(dtype_str, use_zero_copy):
         custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
         relay_model.package_to_onnx(
             name=custom_op_model_name,
-            tvm_target="llvm",
+            tvm_target="llvm --system-lib",
             output_path=custom_op_tar_path,
             use_zero_copy=use_zero_copy,
         )

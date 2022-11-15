@@ -16,6 +16,7 @@ import tvm
 from tvm import relay
 from tvm.relay import vm
 from tvm.tir.expr import Any
+from tvm.contrib import cc
 
 from tvm2onnx import inputs
 from tvm2onnx.error import TVM2ONNXError
@@ -24,7 +25,7 @@ from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
 LOG = logging.getLogger(__name__)
 
 
-def get_static_runtime_path() -> pathlib.Path:
+def get_runtime_path() -> pathlib.Path:
     from tvm._ffi.libinfo import find_lib_path
 
     return pathlib.Path(find_lib_path(["libtvm_runtime.a"])[0])
@@ -117,6 +118,22 @@ class RelayModel:
             [tensor.name for tensor in onnx_model.graph.output],
         )
 
+    def create_archive(output, objects, options=None, cc=None):
+    #     cmd = 
+    #     if isinstance(objects, str):
+    #         cmd += [objects]
+    #     else:
+    #         cmd += objects
+        cc = cc or tvm.contrib.cc.get_cc()
+
+        if tvm.contrib.cc._is_linux_like():
+            tvm.contrib.cc._linux_compile(output, objects, options, cc, compile_shared=False)
+        elif sys.platform == "win32":
+            tvm.contrib.cc._windows_compile(output, objects, options)
+        else:
+            raise ValueError("Unsupported platform")
+
+
     def package_to_onnx(
         self,
         name: str,
@@ -152,12 +169,12 @@ class RelayModel:
             with open(ro_path, "wb") as fo:
                 fo.write(vm_exec_code)
 
-            so_path = tdir_path / "model.so"
+            model_lib_path = tdir_path / "model.o"
 
             # Save module.
-            mod.export_library(str(so_path))
+            mod.export_library(str(model_lib_path), RelayModel.create_archive, options=["-r"])
 
-            libtvm_runtime_a = get_static_runtime_path()
+            libtvm_runtime = get_runtime_path()
             outputs = self.get_outputs()
 
             compiler_flags = [
@@ -175,8 +192,8 @@ class RelayModel:
 
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
-                tvm_runtime_lib=libtvm_runtime_a,
-                model_so=so_path,
+                tvm_runtime_lib=libtvm_runtime,
+                model_so=model_lib_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
                 input_shapes=self.input_shapes,

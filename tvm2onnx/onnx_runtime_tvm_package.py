@@ -316,7 +316,7 @@ class ONNXRuntimeTVMPackage:
         shutil.move(os.path.join(source, "custom_op_library.h"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
         try:
-            shutil.copy(self._model_so, os.path.join(target, "model.so"))
+            shutil.copy(self._model_so, os.path.join(target, "model.obj"))
         except shutil.SameFileError:
             pass
         try:
