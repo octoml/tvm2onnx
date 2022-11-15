@@ -12,22 +12,24 @@
 #include <iostream>
 #include <fstream>
 #include <regex>
-#include <filesystem>
 #include <memory>
+#include <dlfcn.h>
 
 #include <dlpack/dlpack.h>
 #include <tvm/runtime/container/adt.h>
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/vm/vm.h>
+#include <tvm/runtime/builtin_fp16.h>
 
 namespace {
 
 // These two included are generated as part of the build
-#include "model_so.h"
 #include "vm_exec_code_ro.h"
 
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
+
+extern "C" void dummy_func() {}
 
 static ONNXTensorElementDataType GetInputType(size_t index) {
   static ONNXTensorElementDataType input_types[] = {
@@ -76,24 +78,6 @@ struct OrtTensorDimensions : std::vector<int64_t> {
     std::vector<int64_t>::operator=(ort.GetTensorShape(info));
     ort.ReleaseTensorTypeAndShapeInfo(info);
   }
-};
-
-class TempFile {
-  public:
-  TempFile() {
-    char tmp_buf[L_tmpnam];
-    if (tmpnam(tmp_buf)) {
-      // TVM needs the filename to end in .so or .dll, it does not matter which
-      filename = std::string(tmp_buf) + ".so";
-    } else {
-      std::cerr << "ERROR: Can't create temporary file" << std::endl;
-    }
-  }
-
-  ~TempFile() {
-    auto rc = std::remove(filename.c_str());
-  }
-  std::string filename;
 };
 
 struct TVMFuncs {
@@ -323,13 +307,17 @@ struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
 
+  Dl_info info;
+  std::string my_path;
+  if (dladdr((const char*)dummy_func, &info)) {
+    my_path = info.dli_fname;
+  } else {
+    throw std::runtime_error("Unable to locate custom op shared library location");
+  }
+
     use_zero_copy = {{ cookiecutter.use_zero_copy }};
 
-    // TVM's model shared library needs to be a standalone shared lib
-    std::ofstream model_so_f(model_so_file.filename, std::ios::binary);
-    model_so_f.write((const char*)MODEL_SO, MODEL_SO_LEN);
-    model_so_f.close();
-    tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(model_so_file.filename);
+    tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(my_path);
 
     // Copy vm_exec_code to a string for TVM consumption.
     std::stringstream ss;
@@ -422,7 +410,6 @@ struct TVMRuntime {
   tvm::runtime::vm::VirtualMachine vm;
   tvm::runtime::Module exec_mod;
   tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec;
-  TempFile model_so_file;
   // TODO(vvchernov): define device type for specific case. define device id
   DLDevice dl_device = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
   bool constants_bound = false;

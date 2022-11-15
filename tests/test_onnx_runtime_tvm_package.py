@@ -177,10 +177,6 @@ def test_onnx_package():
     _DTYPE_LIST,
 )
 def test_constant_model(dtype_str, use_zero_copy):
-    # TODO(agladyshev): investigate this issue
-    if dtype_str == "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_h2f_ieee")
-
     dtype = np.dtype(dtype_str)
     input_shape = [8, 3, 224, 224]
     with tempfile.TemporaryDirectory() as tdir:
@@ -252,16 +248,20 @@ def test_debug_build():
         assert np.allclose(expected, actual)
 
 
-@pytest.mark.parametrize("dtype_str2", _DTYPE_LIST)
-@pytest.mark.parametrize("dtype_str1", _DTYPE_LIST)
+_FLOAT_DTYPE_LIST = [
+    "float16",
+    "float32",
+    "float64",
+]
+
+
+@pytest.mark.parametrize("dtype_str2", _FLOAT_DTYPE_LIST)
+@pytest.mark.parametrize("dtype_str1", _FLOAT_DTYPE_LIST)
 def test_cast_model(dtype_str1, dtype_str2):
-    # TODO(agladyshev): investigate this issues
-    if dtype_str1 == "float16" and dtype_str2 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_h2f_ieee")
-
-    if dtype_str2 == "float16" and dtype_str1 != "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_f2h_ieee")
-
+    if dtype_str1 == "float64" and dtype_str2 == "float16":
+        # This will fail until this TVM PR is merged
+        # https://github.com/apache/tvm/pull/13395
+        pytest.xfail("undefined symbol: __truncdfhf2")
     shape = (1, 2, 3, 4)
     dtype1 = np.dtype(dtype_str1)
     dtype2 = np.dtype(dtype_str2)
