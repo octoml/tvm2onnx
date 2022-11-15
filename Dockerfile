@@ -8,8 +8,6 @@ RUN apt-get update --fix-missing && \
     apt-get install -y \
         build-essential \
         clang-12 \
-        llvm-12-dev \
-        libc++abi-dev \
         git \
         libopenblas-dev \
         gcc-aarch64-linux-gnu
