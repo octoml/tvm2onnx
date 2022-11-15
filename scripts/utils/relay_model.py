@@ -8,13 +8,13 @@ import logging
 import os
 import pathlib
 import shutil
+import sys
 import tempfile
 import typing
 
 import onnx
 import tvm
 from tvm import relay
-from tvm.contrib import cc
 from tvm.relay import vm
 from tvm.tir.expr import Any
 

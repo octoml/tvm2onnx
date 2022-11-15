@@ -188,10 +188,6 @@ def test_onnx_package():
     _DTYPE_LIST,
 )
 def test_constant_model(dtype_str, use_zero_copy):
-    # TODO(agladyshev): investigate this issue
-    if dtype_str == "float16":
-        pytest.skip("/tmp/tvm_model_XXXXXX.so: undefined symbol: __gnu_h2f_ieee")
-
     dtype = np.dtype(dtype_str)
     input_shape = [8, 3, 224, 224]
     with tempfile.TemporaryDirectory() as tdir:
@@ -206,7 +202,7 @@ def test_constant_model(dtype_str, use_zero_copy):
         custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
         relay_model.package_to_onnx(
             name=custom_op_model_name,
-            tvm_target="llvm --system-lib",
+            tvm_target="llvm",
             output_path=custom_op_tar_path,
             use_zero_copy=use_zero_copy,
         )
