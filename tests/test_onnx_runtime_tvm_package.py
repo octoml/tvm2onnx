@@ -254,10 +254,13 @@ _FLOAT_DTYPE_LIST = [
     "float64",
 ]
 
+
 @pytest.mark.parametrize("dtype_str2", _FLOAT_DTYPE_LIST)
 @pytest.mark.parametrize("dtype_str1", _FLOAT_DTYPE_LIST)
 def test_cast_model(dtype_str1, dtype_str2):
     if dtype_str1 == "float64" and dtype_str2 == "float16":
+        # This will fail until this TVM PR is merged
+        # https://github.com/apache/tvm/pull/13395
         pytest.xfail("undefined symbol: __truncdfhf2")
     shape = (1, 2, 3, 4)
     dtype1 = np.dtype(dtype_str1)

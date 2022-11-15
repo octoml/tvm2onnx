@@ -15,7 +15,7 @@ custom_{{cookiecutter.module_name}}.so: custom_op_library.cc vm_exec_code.h
 		-O2 \
 		-o custom_{{cookiecutter.module_name}}.so \
 		custom_op_library.cc \
-		model.obj \
+		model.o \
 		-Wl,--exclude-libs,ALL \
 		-Wl,--whole-archive {{cookiecutter.libtvm_runtime_a}} -Wl,--no-whole-archive \
 		-L. \

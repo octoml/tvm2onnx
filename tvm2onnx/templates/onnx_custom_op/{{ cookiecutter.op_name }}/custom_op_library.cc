@@ -310,12 +310,9 @@ struct TVMRuntime {
 
   Dl_info info;
   std::string my_path;
-  if (dladdr((const char*)dummy_func, &info))
-  {
+  if (dladdr((const char*)dummy_func, &info)) {
     my_path = info.dli_fname;
-  }
-  else
-  {
+  } else {
     throw std::runtime_error("Unable to locate custom op shared library location");
   }
 
