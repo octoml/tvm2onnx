@@ -6,7 +6,6 @@ import tempfile
 
 import numpy as np
 import onnx
-import onnxruntime
 import pytest
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
@@ -146,11 +145,9 @@ def test_onnx_package():
             tvm_target="llvm",
             output_path=custom_op_tar_path,
         )
-        model_dir = os.path.join(tdir, "model")
+        custom_op_model_dir = os.path.join(tdir, "model")
         with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(model_dir)
-        onnx_model_path = os.path.join(model_dir, "test_model.onnx")
-        custom_lib = os.path.join(model_dir, "custom_test_model.so")
+            tar.extractall(custom_op_model_dir)
 
         input_data = {
             "a": np.array(
@@ -162,17 +159,9 @@ def test_onnx_package():
             ),
         }
 
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.register_custom_ops_library(custom_lib)
-
-        session = onnxruntime.InferenceSession(
-            onnx_model_path,
-            providers=["CPUExecutionProvider"],
-            provider_options=[{}],
-            sess_options=sess_options,
+        output_data = run_with_custom_op(
+            custom_op_model_name, custom_op_model_dir, input_data
         )
-
-        output_data = session.run(output_names=None, input_feed=input_data)
 
         sum = input_data["a"] + input_data["b"]
         product = input_data["a"] * input_data["b"]
@@ -259,18 +248,20 @@ def test_debug_build():
         assert np.allclose(expected, actual)
 
 
-_DTYPE_FLIST = [
+_FLOAT_DTYPE_LIST = [
     "float16",
     "float32",
-    # "float64",
+    "float64",
 ]
 
-
-def test_cast_model():
+@pytest.mark.parametrize("dtype_str2", _FLOAT_DTYPE_LIST)
+@pytest.mark.parametrize("dtype_str1", _FLOAT_DTYPE_LIST)
+def test_cast_model(dtype_str1, dtype_str2):
+    if dtype_str1 == "float64" and dtype_str2 == "float16":
+        pytest.xfail("undefined symbol: __truncdfhf2")
     shape = (1, 2, 3, 4)
-    dtype1 = np.dtype("float16")
-    dtype2 = np.dtype("float32")
-    # print(f"dtype1={dtype_str1} dtype2={dtype_str2}")
+    dtype1 = np.dtype(dtype_str1)
+    dtype2 = np.dtype(dtype_str2)
 
     def make_cast_model(model_shape, input_dtype, output_dtype, save_path):
         input_type = NP_TYPE_TO_TENSOR_TYPE[np.dtype(input_dtype)]
