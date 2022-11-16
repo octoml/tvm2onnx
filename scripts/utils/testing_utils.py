@@ -1,11 +1,38 @@
-"""Running inference in a subprocess to avoid dependency on libtvm.so"""
-import argparse
+"""Testing utilities"""
+import inspect
 import os
 import pickle
+import subprocess
+import sys
+import tarfile
+import tempfile
+import textwrap
 import typing
 
+import decorator
 import numpy as np
 import onnxruntime
+
+
+@decorator.decorator
+def subprocessable(f, *args, **kwargs):
+    def is_picklable(obj):
+        try:
+            pickle.dumps(obj)
+        except pickle.PicklingError:
+            return False
+        return True
+
+    def have_return_value(obj):
+        return inspect.signature(obj).return_annotation
+
+    if not is_picklable((args, kwargs)):
+        raise TypeError(f"All parameters of {f} must be picklable.")
+
+    if have_return_value(f):
+        raise TypeError(f"Function {f} must not have a return value.")
+
+    return f(*args, **kwargs)
 
 
 def get_io_meta(
@@ -158,49 +185,91 @@ def get_ort_output(
     return output
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run inference for Custom Op.")
-    parser.add_argument(
-        "--custom_op_model_name",
-        required=True,
-        help="Name of the model.",
-    )
-    parser.add_argument(
-        "--custom_op_model_dir",
-        required=True,
-        help="Directory with ONNX file and Custom Op shared library.",
-    )
-    parser.add_argument(
-        "--input_data_file",
-        required=True,
-        help="Serialized input dictionary.",
-    )
-    parser.add_argument(
-        "--output_data_file",
-        required=True,
-        help="Serialized output",
-    )
-    parser.add_argument(
-        "--use_zero_copy",
-        action="store_true",
-        help="Use zero_copy methods for TVM and IOBinding mechanism for ORT",
-    )
-    args = parser.parse_args()
+def run_func_in_subprocess(func, *args, **kwargs) -> None:
+    with tempfile.TemporaryDirectory() as temp_directory:
+        input_data_file_name = os.path.join(temp_directory, "input_data")
+        run_in_subprocess_file_name = os.path.join(
+            temp_directory, "run_in_subprocess.py"
+        )
 
-    with open(args.input_data_file, "rb") as input_data_file:
-        input_data = pickle.loads(input_data_file.read())
+        with open(input_data_file_name, "wb") as input_data_file:
+            serialized_input_data = pickle.dumps((args, kwargs))
+            input_data_file.write(serialized_input_data)
 
-    output_data = get_ort_output(
-        args.custom_op_model_name,
-        args.custom_op_model_dir,
-        input_data,
-        args.use_zero_copy,
-    )
+        module = inspect.getmodule(func)
+        if not module:
+            raise RuntimeError(f"Module for {func} not found.")
+        module_name = module.__name__
+        func_name = func.__name__
+        with open(run_in_subprocess_file_name, "w") as run_in_subprocess_file:
+            # TODO(agladyshev): inspect.findsource can be used to find all required imports.
+            run_in_subprocess_file.write(
+                textwrap.dedent(
+                    f"""
+                    import pickle
+                    import argparse
 
-    with open(args.output_data_file, "wb") as output_data_file:
-        serialized_output_data = pickle.dumps(output_data)
-        output_data_file.write(serialized_output_data)
+                    import {module_name}
 
 
-if __name__ == "__main__":
-    main()
+                    def main():
+                        parser = argparse.ArgumentParser()
+                        parser.add_argument(
+                            "--input_data_file",
+                            required=True,
+                        )
+                        args = parser.parse_args()
+
+                        with open(args.input_data_file, "rb") as input_data_file:
+                            args, kwargs = pickle.loads(input_data_file.read())
+
+                        {module_name}.{func_name}(*args, **kwargs)
+
+
+                    if __name__ == '__main__':
+                        main()
+
+                    """
+                )
+            )
+
+        inference_cmd = [
+            sys.executable,
+            run_in_subprocess_file_name,
+            "--input_data_file",
+            input_data_file_name,
+        ]
+        result = subprocess.run(
+            inference_cmd,
+        )
+        assert result.returncode == 0
+
+
+@subprocessable
+def package_model_and_extract_tar(
+    custom_op_tar_path: str, custom_op_model_dir: str, **all_kwargs
+) -> None:
+    from scripts.utils.relay_model import RelayModel
+
+    def get_function_parameters(func: typing.Callable) -> typing.List[str]:
+        return [
+            param.name for param in list(inspect.signature(func).parameters.values())
+        ]
+
+    def get_func_kwargs(func: typing.Callable) -> typing.Dict:
+        parameters = get_function_parameters(func)
+        call_dict = {
+            key: all_kwargs[key] for key in parameters if key in all_kwargs.keys()
+        }
+        call_args = inspect.getcallargs(func, **call_dict)
+        if "cls" in call_args.keys():
+            del call_args["cls"]
+        if "self" in call_args.keys():
+            del call_args["self"]
+        return call_args
+
+    relay_model = RelayModel.from_onnx(**get_func_kwargs(RelayModel.from_onnx))
+    relay_model.package_to_onnx(**get_func_kwargs(relay_model.package_to_onnx))
+
+    with tarfile.open(custom_op_tar_path, "r") as tar:
+        tar.extractall(custom_op_model_dir)

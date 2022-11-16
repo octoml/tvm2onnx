@@ -1,7 +1,5 @@
 """Tests ONNX Packaging."""
 import os
-import sys
-import tarfile
 import tempfile
 
 import numpy as np
@@ -17,7 +15,10 @@ from onnx.helper import (
 )
 from onnx.mapping import NP_TYPE_TO_TENSOR_TYPE
 
-from scripts.utils.relay_model import RelayModel
+import scripts.utils.testing_utils as testing
+
+packaging_function = testing.package_model_and_extract_tar
+inference_function = testing.get_ort_output
 
 _MODEL_PATH = os.path.join(os.path.dirname(__file__), "testdata/abtest.onnx")
 
@@ -94,61 +95,24 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     return c1_data, c2_data
 
 
-def run_with_custom_op(
-    custom_op_model_name, custom_op_model_dir, input_data, use_zero_copy=False
-):
-    import pickle
-    import subprocess
-
-    with tempfile.TemporaryDirectory() as temp_directory:
-        input_data_file_name = os.path.join(temp_directory, "input_data")
-        output_data_file_name = os.path.join(temp_directory, "output_data")
-
-        with open(input_data_file_name, "wb") as input_data_file:
-            serialized_input_data = pickle.dumps(input_data)
-            input_data_file.write(serialized_input_data)
-
-        inference_cmd = [
-            sys.executable,
-            "run_inference_in_subprocess.py",
-            "--custom_op_model_name",
-            custom_op_model_name,
-            "--custom_op_model_dir",
-            custom_op_model_dir,
-            "--input_data_file",
-            input_data_file_name,
-            "--output_data_file",
-            output_data_file_name,
-        ]
-        if use_zero_copy:
-            inference_cmd.append("--use_zero_copy")
-        result = subprocess.run(
-            inference_cmd, cwd=os.path.join(os.path.dirname(__file__))
-        )
-        assert result.returncode == 0
-
-        with open(output_data_file_name, "rb") as output_data_file:
-            output_data = pickle.loads(output_data_file.read())
-
-    return output_data
-
-
 def test_onnx_package():
     with tempfile.TemporaryDirectory() as tdir:
-        relay_model = RelayModel.from_onnx(
-            onnx.load(_MODEL_PATH), dynamic_axis_substitute=1
-        )
+        # Package to Custom Op format and extract Custom Op ONNX file and Custom Op shared library
         custom_op_model_name = "test_model"
         custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
-        relay_model.package_to_onnx(
+        custom_op_model_dir = os.path.join(tdir, "model")
+
+        packaging_function(
+            custom_op_tar_path,
+            custom_op_model_dir,
+            onnx_model=onnx.load(_MODEL_PATH),
+            dynamic_axis_substitute=1,
             name=custom_op_model_name,
             tvm_target="llvm",
             output_path=custom_op_tar_path,
         )
-        custom_op_model_dir = os.path.join(tdir, "model")
-        with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
 
+        # Run inference
         input_data = {
             "a": np.array(
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -159,7 +123,7 @@ def test_onnx_package():
             ),
         }
 
-        output_data = run_with_custom_op(
+        output_data = inference_function(
             custom_op_model_name, custom_op_model_dir, input_data
         )
 
@@ -171,76 +135,46 @@ def test_onnx_package():
         assert np.allclose(product, actual_product)
 
 
+@pytest.mark.parametrize("debug_build", [False, True])
 @pytest.mark.parametrize("use_zero_copy", [False, True])
 @pytest.mark.parametrize(
     "dtype_str",
     _DTYPE_LIST,
 )
-def test_constant_model(dtype_str, use_zero_copy):
+def test_constant_model(dtype_str, use_zero_copy, debug_build):
     dtype = np.dtype(dtype_str)
     input_shape = [8, 3, 224, 224]
     with tempfile.TemporaryDirectory() as tdir:
+        # Make source ONNX model
         model_path = os.path.join(tdir, "test.onnx")
         c1_data, c2_data = add_constant_onnx_model(
             model_dir=tdir, input_shape=input_shape, dtype_str=dtype_str, uniform=True
         )
-        relay_model = RelayModel.from_onnx(
-            onnx.load(model_path), dynamic_axis_substitute=1
-        )
+
+        # Package to Custom Op format and extract Custom Op ONNX file and Custom Op shared library
         custom_op_model_name = f"test_model_{dtype_str}"
         custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
-        relay_model.package_to_onnx(
+        custom_op_model_dir = os.path.join(tdir, "model")
+
+        packaging_function(
+            custom_op_tar_path,
+            custom_op_model_dir,
+            onnx_model=onnx.load(model_path),
+            dynamic_axis_substitute=1,
             name=custom_op_model_name,
             tvm_target="llvm",
             output_path=custom_op_tar_path,
             use_zero_copy=use_zero_copy,
+            debug_build=debug_build,
         )
-        custom_op_model_dir = os.path.join(tdir, "model")
-        with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
 
+        # Run inference
         input_data = {
             "a": np.random.randn(*c1_data.shape).astype(dtype),
         }
 
-        result = run_with_custom_op(
+        result = inference_function(
             custom_op_model_name, custom_op_model_dir, input_data, use_zero_copy
-        )
-
-        expected = (input_data["a"] + c1_data) * c2_data
-        actual = result[0]
-        assert np.allclose(expected, actual)
-
-
-def test_debug_build():
-    dtype = np.dtype("float32")
-    input_shape = [8, 3, 224, 224]
-    with tempfile.TemporaryDirectory() as tdir:
-        model_path = os.path.join(tdir, "test.onnx")
-        c1_data, c2_data = add_constant_onnx_model(
-            model_dir=tdir, input_shape=input_shape, dtype_str="float32", uniform=True
-        )
-        relay_model = RelayModel.from_onnx(
-            onnx.load(model_path), dynamic_axis_substitute=1
-        )
-        custom_op_model_name = "test_model_debug"
-        custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
-        relay_model.package_to_onnx(
-            name=custom_op_model_name,
-            tvm_target="llvm",
-            output_path=custom_op_tar_path,
-            debug_build=True,
-        )
-        custom_op_model_dir = os.path.join(tdir, "model")
-        with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
-
-        input_data = {
-            "a": np.random.randn(*c1_data.shape).astype(dtype),
-        }
-
-        result = run_with_custom_op(
-            custom_op_model_name, custom_op_model_dir, input_data
         )
 
         expected = (input_data["a"] + c1_data) * c2_data
@@ -292,28 +226,26 @@ def test_cast_model(dtype_str1, dtype_str2):
         source_model_path = os.path.join(temp_dir, "cast.onnx")
         make_cast_model(shape, dtype1, dtype2, source_model_path)
 
-        # Package to Custom Op format
+        # Package to Custom Op format and extract Custom Op ONNX file and Custom Op shared library
         custom_op_model_name = f"cast_{dtype1}_to_{dtype2}"
         custom_op_tar_path = os.path.join(temp_dir, f"{custom_op_model_name}.onnx")
-        relay_model = RelayModel.from_onnx(
-            onnx.load(source_model_path), dynamic_axis_substitute=1
-        )
-        relay_model.package_to_onnx(
+        custom_op_model_dir = os.path.join(temp_dir, "model")
+
+        packaging_function(
+            custom_op_tar_path,
+            custom_op_model_dir,
+            onnx_model=onnx.load(source_model_path),
+            dynamic_axis_substitute=1,
             name=custom_op_model_name,
             tvm_target="llvm",
             output_path=custom_op_tar_path,
         )
 
-        # Extract Custom Op ONNX file and Custom Op shared library
-        custom_op_model_dir = os.path.join(temp_dir, "model")
-        with tarfile.open(custom_op_tar_path, "r") as tar:
-            tar.extractall(custom_op_model_dir)
-
         # Run inference
         input_data = {
             "input": np.random.randn(*shape).astype(dtype1),
         }
-        output = run_with_custom_op(
+        output = inference_function(
             custom_op_model_name, custom_op_model_dir, input_data
         )
         assert output[0].dtype == dtype2

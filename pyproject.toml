@@ -51,6 +51,7 @@ mypy = "^0.971"
 flake8 = "^3.9.2"
 ffi-navigator = "^0.5.2"
 typing-extensions = "*"
+types-decorator = "5.1.8"
 parse = "*"
 
 [tool.isort]

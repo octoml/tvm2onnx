@@ -976,6 +976,14 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "types-decorator"
+version = "5.1.8"
+description = "Typing stubs for decorator"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "ujson"
 version = "5.4.0"
 description = "Ultra fast JSON encoder and decoder for Python"
@@ -1433,6 +1441,10 @@ typed-ast = [
     {file = "typed_ast-1.4.3-cp39-cp39-win32.whl", hash = "sha256:209596a4ec71d990d71d5e0d312ac935d86930e6eecff6ccc7007fe54d703808"},
     {file = "typed_ast-1.4.3-cp39-cp39-win_amd64.whl", hash = "sha256:9c6d1a54552b5330bc657b7ef0eae25d00ba7ffe85d9ea8ae6540d2197a3788c"},
     {file = "typed_ast-1.4.3.tar.gz", hash = "sha256:fb1bbeac803adea29cedd70781399c99138358c26d05fcbd23c13016b7f5ec65"},
+]
+types-decorator = [
+    {file = "types-decorator-5.1.8.tar.gz", hash = "sha256:0cb0cc4ab6cd6f90981cf530376be5d01156c8f423a1dff1456bbc0259d3e393"},
+    {file = "types_decorator-5.1.8-py3-none-any.whl", hash = "sha256:b664ca986324ed8ad6e52b56022417556af265b7494fbd8e77d8a2856cdfb5e4"},
 ]
 typing-extensions = []
 ujson = []
