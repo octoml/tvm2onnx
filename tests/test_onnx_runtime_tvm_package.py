@@ -188,6 +188,7 @@ _FLOAT_DTYPE_LIST = [
     "float64",
 ]
 
+
 @pytest.mark.parametrize("dtype_str2", _FLOAT_DTYPE_LIST)
 @pytest.mark.parametrize("dtype_str1", _FLOAT_DTYPE_LIST)
 def test_cast_model(dtype_str1, dtype_str2):
