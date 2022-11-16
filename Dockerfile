@@ -40,7 +40,7 @@ RUN git clone \
     --recursive \
     https://github.com/apache/tvm.git && \
     cd tvm && \
-    git checkout 3e3d900c66ba8caad6b491c60d1331be470f9cba && \
+    git checkout 44ed06ac9f019f9f06608504c3382d0905b6d5a2 && \
     git submodule update
 
 WORKDIR ${THIRDPARTY_HOME}
