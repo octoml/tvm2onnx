@@ -111,6 +111,7 @@ class ONNXRuntimeTVMPackage:
         compiler: str = "g++",
         compiler_flags: str = "",
         use_zero_copy: bool = False,
+        windows_target: bool = False,
     ):
         """Initializes a new package.
 
@@ -143,6 +144,26 @@ class ONNXRuntimeTVMPackage:
         self._compiler = compiler
         self._compiler_flags = compiler_flags
         self._use_zero_copy = use_zero_copy
+        self._windows_target = windows_target
+        self._module_name = (
+            f"{self._model_name}{'.dll' if self._windows_target else '.so'}"
+        )
+
+        if self._windows_target:
+            flags = [
+                "-DORT_DLL_IMPORT=1",
+                "-DNOMINMAX",
+                "-Wl,-DEF:custom_op_library.def",
+                f"-Wl,/wholearchive:{self._tvm_runtime_lib}",
+                "-Wl,/wholearchive:model.o",
+            ]
+        else:
+            flags = [
+                "-Wl,--exclude-libs,ALL",
+                f"-Wl,--whole-archive {self._tvm_runtime_lib} -Wl,--no-whole-archive",
+                "-Wl,--whole-archive model.o -Wl,--no-whole-archive",
+            ]
+        self._compiler_flags += " " + " ".join(flags)
 
     @property
     def template_dir(self):
@@ -243,7 +264,7 @@ class ONNXRuntimeTVMPackage:
         return {
             "op_name": "custom_op_library_source",
             "libtvm_runtime_a": str(self._tvm_runtime_lib),
-            "module_name": self._model_name,
+            "module_name": self._module_name,
             "custom_op_name": self.custom_op_name,
             "dl_device_type": self._dl_device_type,
             "input_count": str(len(inputs)),
