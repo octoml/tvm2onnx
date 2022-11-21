@@ -13,7 +13,11 @@
 #include <fstream>
 #include <regex>
 #include <memory>
-#include <dlfcn.h>
+#ifdef _WIN32
+  #include <windows.h>
+#else
+  #include <dlfcn.h>
+#endif
 
 #include <dlpack/dlpack.h>
 #include <tvm/runtime/container/adt.h>
@@ -30,6 +34,40 @@ namespace {
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
 extern "C" void dummy_func() {}
+
+std::string get_my_path() {
+#ifdef _WIN32
+  char path[MAX_PATH];
+  HMODULE hm = NULL;
+
+  if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | 
+      GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+      (LPCSTR) &dummy_func, &hm) == 0) {
+    int ret = GetLastError();
+    fprintf(stderr, "GetModuleHandle failed, error = %d\n", ret);
+    // Return or however you want to handle an error.
+  }
+  auto len = GetModuleFileName(hm, path, sizeof(path));
+  if (len == 0) {
+    int ret = GetLastError();
+    fprintf(stderr, "GetModuleFileName failed, error = %d\n", ret);
+    // Return or however you want to handle an error.
+  }
+  std::cout << __FILE__ << " " << __LINE__ << std::endl;
+  std::string s(path, len);
+  std::cout << __FILE__ << " " << __LINE__ << " " << s << std::endl;
+  return s;
+#else
+  Dl_info info;
+  std::string my_path;
+  if (dladdr((const char*)dummy_func, &info)) {
+    return info.dli_fname;
+  } else {
+    throw std::runtime_error("Unable to locate custom op shared library location");
+  }
+#endif
+}
+
 
 static ONNXTensorElementDataType GetInputType(size_t index) {
   static ONNXTensorElementDataType input_types[] = {
@@ -307,23 +345,14 @@ struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
 
-  Dl_info info;
-  std::string my_path;
-  if (dladdr((const char*)dummy_func, &info)) {
-    my_path = info.dli_fname;
-  } else {
-    throw std::runtime_error("Unable to locate custom op shared library location");
-  }
-
     use_zero_copy = {{ cookiecutter.use_zero_copy }};
 
-    tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(my_path);
+    tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(get_my_path());
 
     // Copy vm_exec_code to a string for TVM consumption.
-    std::stringstream ss;
-    ss.write((const char*)&VM_EXEC_CODE_RO, VM_EXEC_CODE_RO_LEN);
+    std::string ro_code((const char*)&VM_EXEC_CODE_RO, VM_EXEC_CODE_RO_LEN);
 
-    exec_mod = tvm::runtime::vm::Executable::Load(ss.str(), lib);
+    exec_mod = tvm::runtime::vm::Executable::Load(ro_code, lib);
     const tvm::runtime::vm::Executable* tmp =
         exec_mod.as<tvm::runtime::vm::Executable>();
     exec = tvm::runtime::GetObjectPtr<tvm::runtime::vm::Executable>(
@@ -440,6 +469,7 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
 } // End anonymous namespace
 
 OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api) {
+  std::cout << __FILE__ << " " << __LINE__ << std::endl;
   OrtCustomOpDomain* domain = nullptr;
   const OrtApi* ortApi = api->GetApi(ORT_API_VERSION);
 
