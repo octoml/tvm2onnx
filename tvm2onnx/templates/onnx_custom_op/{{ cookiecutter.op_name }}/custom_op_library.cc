@@ -36,6 +36,10 @@ static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 extern "C" void dummy_func() {}
 
 std::string get_my_path() {
+  // TVM needs to open a model shared library in order to load. Since we have statically
+  // link the model to custom_op we need to find the filesystem path to custom_op in order
+  // to load that instead. Since the model is linked to custom_op it finds what it needs.
+  // This function finds the filesystem path to the currently running shared object.
 #ifdef _WIN32
   char path[MAX_PATH];
   HMODULE hm = NULL;
@@ -53,9 +57,6 @@ std::string get_my_path() {
     fprintf(stderr, "GetModuleFileName failed, error = %d\n", ret);
     // Return or however you want to handle an error.
   }
-  std::cout << __FILE__ << " " << __LINE__ << std::endl;
-  std::string s(path, len);
-  std::cout << __FILE__ << " " << __LINE__ << " " << s << std::endl;
   return s;
 #else
   Dl_info info;
@@ -469,7 +470,6 @@ struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
 } // End anonymous namespace
 
 OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api) {
-  std::cout << __FILE__ << " " << __LINE__ << std::endl;
   OrtCustomOpDomain* domain = nullptr;
   const OrtApi* ortApi = api->GetApi(ORT_API_VERSION);
 
