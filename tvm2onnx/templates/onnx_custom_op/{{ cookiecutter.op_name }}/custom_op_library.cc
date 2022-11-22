@@ -48,14 +48,16 @@ std::string get_my_path() {
       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
       (LPCSTR) &dummy_func, &hm) == 0) {
     int ret = GetLastError();
-    fprintf(stderr, "GetModuleHandle failed, error = %d\n", ret);
-    // Return or however you want to handle an error.
+    std::stringstream ss;
+    ss << "GetModuleHandle failed, error = " << ret;
+    throw std::runtime_error(ss.str());
   }
   auto len = GetModuleFileName(hm, path, sizeof(path));
   if (len == 0) {
     int ret = GetLastError();
-    fprintf(stderr, "GetModuleFileName failed, error = %d\n", ret);
-    // Return or however you want to handle an error.
+    std::stringstream ss;
+    ss << "GetModuleFileName failed, error = " << ret;
+    throw std::runtime_error(ss.str());
   }
   return s;
 #else
