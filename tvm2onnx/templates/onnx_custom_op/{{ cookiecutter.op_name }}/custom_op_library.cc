@@ -59,7 +59,7 @@ std::string get_my_path() {
     ss << "GetModuleFileName failed, error = " << ret;
     throw std::runtime_error(ss.str());
   }
-  return s;
+  return path;
 #else
   Dl_info info;
   std::string my_path;
