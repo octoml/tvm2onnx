@@ -335,6 +335,7 @@ class ONNXRuntimeTVMPackage:
         target = os.path.join(build_dir)
         shutil.move(os.path.join(source, "custom_op_library.cc"), target)
         shutil.move(os.path.join(source, "custom_op_library.h"), target)
+        shutil.move(os.path.join(source, "custom_op_library.def"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
         try:
             shutil.copy(self._model_so, os.path.join(target, "model.o"))
@@ -345,7 +346,7 @@ class ONNXRuntimeTVMPackage:
         except shutil.SameFileError:
             pass
         make_dir = build_dir
-        custom_op_name = f"custom_{self._model_name}.so"
+        custom_op_name = f"custom_{self._module_name}"
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:
             LOG.debug("custom op library generated: " + f.read())
         result = subprocess.run(["make"], capture_output=True, cwd=make_dir, text=True)
