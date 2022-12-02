@@ -30,7 +30,7 @@ ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
 # Set to ascii to make stdout for subprocess.run in ascii. No funky chars.
-ENV LC_ALL="en_US.ascii"
+#ENV LC_ALL="en_US.ascii"
 
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
@@ -38,9 +38,9 @@ WORKDIR ${THIRDPARTY_HOME}
 # For TVM I can't checkout a hash directly, I need to clone then checkout the hash
 RUN git clone \
     --recursive \
-    https://github.com/apache/tvm.git && \
+    https://github.com/tlc-pack/relax.git tvm && \
     cd tvm && \
-    git checkout 44ed06ac9f019f9f06608504c3382d0905b6d5a2 && \
+    git checkout onnx_importer && \
     git submodule update
 
 WORKDIR ${THIRDPARTY_HOME}
