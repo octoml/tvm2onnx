@@ -64,7 +64,7 @@ RUN mkdir -p build && \
     echo "set(USE_LLVM llvm-config-12)" >> config.cmake && \
     echo "set(USE_LIBBACKTRACE OFF)" >> config.cmake && \
     echo "set(USE_SORT ON)" >> config.cmake && \
-    echo "set(USE_RPC OFF)" >> config.cmake && \
+    echo "set(USE_RPC ON)" >> config.cmake && \
     # TODO: rkimball build cuda/non-cuda builds
     echo "set(USE_CUDA ON)" >> config.cmake && \
     echo "set(USE_CUDNN ON)" >> config.cmake && \
