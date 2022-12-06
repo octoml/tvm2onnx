@@ -195,7 +195,6 @@ class RelayModel:
                 compiler_flags.append("-g")
                 compiler_flags.append("-O0")
 
-            print(compiler_flags)
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
                 tvm_runtime_lib=libtvm_runtime,

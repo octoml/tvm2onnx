@@ -185,9 +185,7 @@ class TVMRunnerCopy : public TVMRunnerBase {
     {{details.cpp_type}}* output{{details.index}}_ptr = ort_.GetTensorMutableData<{{details.cpp_type}}>(output{{details.index}});
     {% endfor %}
 
-    std::cout << "START RUN" << std::endl;
     tvm::runtime::ObjectRef out = funcs->run_func("main");
-    std::cout << "FINISH RUN" << std::endl;
 
     // Copy result data to ort output tensors
     {% for details in cookiecutter.outputs -%}
@@ -197,14 +195,12 @@ class TVMRunnerCopy : public TVMRunnerBase {
     tvm::runtime::NDArray nd_output{{details.index}} = tvm::runtime::NDArray(tvm_output{{details.index}});
     nd_output{{details.index}}.CopyToBytes(output{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     {% endfor %}
-    std::cout << "MADE IT HERE" << std::endl;
   }
 
  private:
   void SetInputTensors(std::vector<tvm::runtime::NDArray>& inputs, const std::string& func_name) {
     // arity is num of inputs + 1, because first argument to the set_input_func
     // is the name of the function that should take those inputs.
-    std::cout << "Setting Inputs" << std::endl;
     size_t arity = inputs.size() + 1;
     std::vector<TVMValue> values(arity);
     std::vector<int> codes(arity);
@@ -217,7 +213,6 @@ class TVMRunnerCopy : public TVMRunnerBase {
 
     tvm::runtime::TVMRetValue rv;
     funcs->set_input_func.CallPacked(tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
-    std::cout << "Inputs Set" << std::endl;
   }
 
   std::vector<tvm::runtime::NDArray> GetInputTensors(OrtKernelContext* context) {
@@ -257,7 +252,6 @@ class TVMRunnerZeroCopy : public TVMRunnerBase {
   void run(OrtKernelContext* context) final {
     // Formally we should do set_input, set_outputs and run for the same func name
     // TODO(vvchernov): can func_name be not "main"? I have never seen such case
-    std::cout << "RUNNING" << std::endl;
     const std::string func_name = "main";
     std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(context);
     SetInputTensors(ort_dl_inputs, func_name);
@@ -364,16 +358,11 @@ struct TVMRuntime {
     // Copy vm_exec_code to a string for TVM consumption.
     //std::string ro_code((const char*)&VM_EXEC_CODE_RO, VM_EXEC_CODE_RO_LEN);
 
-    std::cout << "Creating Executable" << std::endl;
     exec_mod = tvm::runtime::Module::LoadFromFile(get_my_path());
-    //exec_mod = tvm::runtime::relax_vm::Executable::LoadFromFile(get_my_path());
-    //std::cout << "Creating Executable 2" << std::endl;
     const tvm::runtime::relax_vm::Executable* tmp =
         exec_mod.as<tvm::runtime::relax_vm::Executable>();
-    std::cout << "Creating Executable 3" << std::endl;
     exec = tvm::runtime::GetObjectPtr<tvm::runtime::relax_vm::Executable>(
         const_cast<tvm::runtime::relax_vm::Executable*>(tmp));
-    std::cout << "Executable Created" << std::endl;
   }
 
   ~TVMRuntime() {
