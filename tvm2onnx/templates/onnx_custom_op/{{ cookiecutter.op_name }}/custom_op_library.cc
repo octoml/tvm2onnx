@@ -23,13 +23,13 @@
 #include <tvm/runtime/container/adt.h>
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
-#include <tvm/runtime/vm/vm.h>
+#include <tvm/runtime/relax_vm/vm.h>
 #include <tvm/runtime/builtin_fp16.h>
 
 namespace {
 
 // These two included are generated as part of the build
-#include "vm_exec_code_ro.h"
+//#include "vm_exec_code_ro.h"
 
 static const char* c_OpDomain = "{{ cookiecutter.domain }}";
 
@@ -123,7 +123,7 @@ struct OrtTensorDimensions : std::vector<int64_t> {
 
 struct TVMFuncs {
   tvm::runtime::PackedFunc set_input_func;
-  tvm::runtime::PackedFunc set_outputs_func;
+  tvm::runtime::PackedFunc get_output_func;
   tvm::runtime::PackedFunc run_func;
 };
 using TVMFuncsPtr = std::unique_ptr<TVMFuncs>;
@@ -185,7 +185,9 @@ class TVMRunnerCopy : public TVMRunnerBase {
     {{details.cpp_type}}* output{{details.index}}_ptr = ort_.GetTensorMutableData<{{details.cpp_type}}>(output{{details.index}});
     {% endfor %}
 
+    std::cout << "START RUN" << std::endl;
     tvm::runtime::ObjectRef out = funcs->run_func("main");
+    std::cout << "FINISH RUN" << std::endl;
     std::vector<tvm::runtime::NDArray> outputs = GetOutputTensors(out);
 
     // Copy result data to ort output tensors
@@ -198,6 +200,7 @@ class TVMRunnerCopy : public TVMRunnerBase {
   void SetInputTensors(std::vector<tvm::runtime::NDArray>& inputs, const std::string& func_name) {
     // arity is num of inputs + 1, because first argument to the set_input_func
     // is the name of the function that should take those inputs.
+    std::cout << "Setting Inputs" << std::endl;
     size_t arity = inputs.size() + 1;
     std::vector<TVMValue> values(arity);
     std::vector<int> codes(arity);
@@ -210,6 +213,7 @@ class TVMRunnerCopy : public TVMRunnerBase {
 
     tvm::runtime::TVMRetValue rv;
     funcs->set_input_func.CallPacked(tvm::runtime::TVMArgs(values.data(), codes.data(), arity), &rv);
+    std::cout << "Inputs Set" << std::endl;
   }
 
   std::vector<tvm::runtime::NDArray> GetInputTensors(OrtKernelContext* context) {
@@ -249,12 +253,13 @@ class TVMRunnerZeroCopy : public TVMRunnerBase {
   void run(OrtKernelContext* context) final {
     // Formally we should do set_input, set_outputs and run for the same func name
     // TODO(vvchernov): can func_name be not "main"? I have never seen such case
+    std::cout << "RUNNING" << std::endl;
     const std::string func_name = "main";
     std::vector<DLTensor> ort_dl_inputs = GetInputDLTensors(context);
     SetInputTensors(ort_dl_inputs, func_name);
 
     std::vector<DLTensor> ort_dl_outputs = GetOutputDLTensors(context);
-    LinkOutputTensors(ort_dl_outputs, func_name);
+    //LinkOutputTensors(ort_dl_outputs, func_name);
 
     // Inference
     funcs->run_func(func_name);
@@ -332,7 +337,7 @@ class TVMRunnerZeroCopy : public TVMRunnerBase {
     }
 
     tvm::runtime::TVMRetValue rv;
-    funcs->set_outputs_func.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
+    //funcs->set_outputs_func.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), num_total_args), &rv);
   }
 };
 
@@ -350,16 +355,21 @@ struct TVMRuntime {
 
     use_zero_copy = {{ cookiecutter.use_zero_copy }};
 
-    tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(get_my_path());
+    //tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(get_my_path());
 
     // Copy vm_exec_code to a string for TVM consumption.
-    std::string ro_code((const char*)&VM_EXEC_CODE_RO, VM_EXEC_CODE_RO_LEN);
+    //std::string ro_code((const char*)&VM_EXEC_CODE_RO, VM_EXEC_CODE_RO_LEN);
 
-    exec_mod = tvm::runtime::vm::Executable::Load(ro_code, lib);
-    const tvm::runtime::vm::Executable* tmp =
-        exec_mod.as<tvm::runtime::vm::Executable>();
-    exec = tvm::runtime::GetObjectPtr<tvm::runtime::vm::Executable>(
-        const_cast<tvm::runtime::vm::Executable*>(tmp));
+    std::cout << "Creating Executable" << std::endl;
+    exec_mod = tvm::runtime::Module::LoadFromFile(get_my_path());
+    //exec_mod = tvm::runtime::relax_vm::Executable::LoadFromFile(get_my_path());
+    //std::cout << "Creating Executable 2" << std::endl;
+    const tvm::runtime::relax_vm::Executable* tmp =
+        exec_mod.as<tvm::runtime::relax_vm::Executable>();
+    std::cout << "Creating Executable 3" << std::endl;
+    exec = tvm::runtime::GetObjectPtr<tvm::runtime::relax_vm::Executable>(
+        const_cast<tvm::runtime::relax_vm::Executable*>(tmp));
+    std::cout << "Executable Created" << std::endl;
   }
 
   ~TVMRuntime() {
@@ -382,7 +392,7 @@ struct TVMRuntime {
     // of loading takes place here.
     // void Executable::LoadLateBoundConstantsFromMap(Map<String, NDArray> map)
     // tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> runtime_map(const_map);
-    exec->LoadLateBoundConstantsFromMap(const_map);
+    //exec->LoadLateBoundConstantsFromMap(const_map);
     vm.LoadExecutable(exec);
 
     // Initialize the VM for the specified device. If the device is not a CPU,
@@ -394,7 +404,7 @@ struct TVMRuntime {
       arity = 6;
     }
     // Specify how to allocate memory for the target devices.
-    uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
+    uint64_t alloc_type = uint64_t(tvm::runtime::relax_vm::AllocatorType::kPooled);
     // TODO: rkimball use proper device
     uint64_t device_id = 0;
     // Create a variable length input to the packed function.
@@ -413,14 +423,14 @@ struct TVMRuntime {
     }
     tvm::runtime::TVMRetValue rv;
     // Call the packed func with the init arguments.
-    vm.GetFunction("init", nullptr)
+    vm.GetFunction("vm_initialization", nullptr)
         .CallPacked(
             tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
 
     TVMFuncsPtr funcs = std::make_unique<TVMFuncs>(TVMFuncs{
       vm.GetFunction("set_input", nullptr),
-      vm.GetFunction("set_outputs", nullptr),
-      vm.GetFunction("invoke", nullptr)
+      vm.GetFunction("get_output", nullptr),
+      vm.GetFunction("invoke_stateful", nullptr)
     });
     runner = GetRunner(ort_, std::move(funcs), use_zero_copy);
   }
@@ -439,9 +449,9 @@ struct TVMRuntime {
  private:
   Ort::CustomOpApi ort_;
   std::unique_ptr<TVMRunnerBase> runner;
-  tvm::runtime::vm::VirtualMachine vm;
+  tvm::runtime::relax_vm::VirtualMachine vm;
   tvm::runtime::Module exec_mod;
-  tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec;
+  tvm::runtime::ObjectPtr<tvm::runtime::relax_vm::Executable> exec;
   // TODO(vvchernov): define device type for specific case. define device id
   DLDevice dl_device = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
   bool constants_bound = false;

@@ -341,10 +341,11 @@ class ONNXRuntimeTVMPackage:
             shutil.copy(self._model_so, os.path.join(target, "model.o"))
         except shutil.SameFileError:
             pass
-        try:
-            shutil.copy(self._model_ro, os.path.join(target, "vm_exec_code.ro"))
-        except shutil.SameFileError:
-            pass
+        # Model ro not used in relax.
+        #try:
+        #    shutil.copy(self._model_ro, os.path.join(target, "vm_exec_code.ro"))
+        #except shutil.SameFileError:
+        #    pass
         make_dir = build_dir
         custom_op_name = f"custom_{self._module_name}"
         with open(os.path.join(build_dir, "custom_op_library.cc"), "r") as f:

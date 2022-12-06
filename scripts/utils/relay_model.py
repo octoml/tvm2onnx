@@ -148,29 +148,36 @@ class RelayModel:
         with tempfile.TemporaryDirectory() as tdir:
             tdir_path = pathlib.Path(tdir)
 
-            vm_exec = vm.compile(
-                copy.deepcopy(self.model),
-                tvm_target,
-                params=self.params,
-            )
+            #vm_exec = vm.compile(
+            #    copy.deepcopy(self.model),
+            #    tvm_target,
+            #    params=self.params,
+            #)
+            model_lib_path = "/usr/tvm2onnx/tests/models/packaged.o"
+            # VM can be constructed directly from saved module.
+            #vm_exec = tvm.runtime.load_module("/usr/tvm2onnx/tests/models/packaged.o")
 
-            constants_map = {
-                const_name: data.numpy()
-                for const_name, data in vm_exec.get_late_bound_consts(1024).items()
-            }
+            #constants_map = {
+            #    const_name: data.numpy()
+            #    for const_name, data in vm_exec.get_late_bound_consts(1024).items()
+            #}
 
+            # No constants map used for now.
+            constants_map = {}
+
+            # Skip all these steps because its already done.
             # Save vm exec code bytes.
-            ro_path = tdir_path / "vm_exec_code.ro"
-            vm_exec_code, mod = vm_exec.save()
-            with open(ro_path, "wb") as fo:
-                fo.write(vm_exec_code)
+            #ro_path = tdir_path / "vm_exec_code.ro"
+            #vm_exec_code, mod = vm_exec.save()
+            #with open(ro_path, "wb") as fo:
+            #    fo.write(vm_exec_code)
 
-            model_lib_path = tdir_path / "model.o"
+            #model_lib_path = tdir_path / "model.o"
 
-            # Save module.
-            mod.export_library(
-                str(model_lib_path), RelayModel.create_archive, options=["-r"]
-            )
+            ## Save module.
+            #mod.export_library(
+            #    str(model_lib_path), RelayModel.create_archive, options=["-r"]
+            #)
 
             libtvm_runtime = get_runtime_path()
             outputs = self.get_outputs()
@@ -188,17 +195,18 @@ class RelayModel:
                 compiler_flags.append("-g")
                 compiler_flags.append("-O0")
 
+            print(compiler_flags)
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
                 tvm_runtime_lib=libtvm_runtime,
                 model_so=model_lib_path,
-                model_ro=ro_path,
+                model_ro=None,
                 constants_map=constants_map,
                 input_shapes=self.input_shapes,
                 input_dtypes=self.input_dtypes,
                 output_shapes={t.name: t.shape for t in outputs},
                 output_dtypes={t.name: t.dtype for t in outputs},
-                dl_device_type="kDLCUDA" if "cuda" in tvm_target else "kDLCPU",
+                dl_device_type="kDLCUDA",
                 metadata=metadata,
                 compiler_flags=" ".join(compiler_flags),
                 use_zero_copy=use_zero_copy,

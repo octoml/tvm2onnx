@@ -2,10 +2,10 @@
 
 .DEFAULT_GOAL := custom_{{cookiecutter.module_name}}
 
-vm_exec_code.h : vm_exec_code.ro
-	xxd -i -C vm_exec_code.ro > vm_exec_code_ro.h
+#vm_exec_code.h : vm_exec_code.ro
+#	xxd -i -C vm_exec_code.ro > vm_exec_code_ro.h
 
-custom_{{cookiecutter.module_name}}: custom_op_library.cc vm_exec_code.h
+custom_{{cookiecutter.module_name}}: custom_op_library.cc #vm_exec_code.h
 	{{cookiecutter.compiler}} \
 		-shared \
 		-Iinclude \

@@ -124,13 +124,15 @@ def test_models_in_models_dir(model_name):
         for name, shape in relay_model.input_shapes.items():
             print(f"input {name}, shape {shape}")
         with tempfile.TemporaryDirectory() as tdir:
-            onnx_path = os.path.join(tdir, "test_model.tvm.onnx")
+            onnx_path = os.path.join("outputs", "test_model.tvm.onnx")
             relay_model.package_to_onnx(
                 name="test_model",
                 tvm_target="llvm",
                 output_path=onnx_path,
             )
-            model_dir = os.path.join(tdir, "model")
+
+            #model_dir = os.path.join(tdir, "model")
+            model_dir = "outputs"
             with tarfile.open(onnx_path, "r") as tar:
                 tar.extractall(model_dir)
             onnx_model_path = os.path.join(model_dir, "test_model.onnx")
@@ -174,3 +176,7 @@ def test_models_in_models_dir(model_name):
             #    # assert mse < 1e-4
 
             print("Successfully ran tvm model in onnxruntime")
+
+
+if __name__ == "__main__":
+    test_models_in_models_dir("vortex_fp16.onnx")
