@@ -188,12 +188,16 @@ class TVMRunnerCopy : public TVMRunnerBase {
     std::cout << "START RUN" << std::endl;
     tvm::runtime::ObjectRef out = funcs->run_func("main");
     std::cout << "FINISH RUN" << std::endl;
-    std::vector<tvm::runtime::NDArray> outputs = GetOutputTensors(out);
 
     // Copy result data to ort output tensors
     {% for details in cookiecutter.outputs -%}
-    outputs[{{details.index}}].CopyToBytes(output{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
+    // Get TVM output.
+    //tvm::runtime::NDArray tvm_output{{details.index}} = tvm::Downcast<tvm::runtime::NDArray>(funcs->get_output_func({{details.index}})); 
+    auto tvm_output{{details.index}} = funcs->get_output_func("main", {{details.index}}); 
+    //std::vector<tvm::runtime::NDArray> outputs;
+    //tvm_output{{details.index}}.CopyToBytes(output{{details.index}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
     {% endfor %}
+    std::cout << "MADE IT HERE" << std::endl;
   }
 
  private:

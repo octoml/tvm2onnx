@@ -126,7 +126,7 @@ def test_models_in_models_dir(model_name):
         with tempfile.TemporaryDirectory() as tdir:
             onnx_path = os.path.join("outputs", "test_model.tvm.onnx")
             relay_model.package_to_onnx(
-                name="test_model",
+                name="vortex_fp16",
                 tvm_target="llvm",
                 output_path=onnx_path,
             )
@@ -135,8 +135,8 @@ def test_models_in_models_dir(model_name):
             model_dir = "outputs"
             with tarfile.open(onnx_path, "r") as tar:
                 tar.extractall(model_dir)
-            onnx_model_path = os.path.join(model_dir, "test_model.onnx")
-            custom_lib = os.path.join(model_dir, "custom_test_model.so")
+            onnx_model_path = os.path.join(model_dir, "vortex_fp16.onnx")
+            custom_lib = os.path.join(model_dir, "custom_vortex_fp16.so")
 
             input_data = {}
             for name, shape in relay_model.input_shapes.items():
