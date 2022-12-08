@@ -67,8 +67,8 @@ RUN mkdir -p build && \
     echo "set(USE_RPC ON)" >> config.cmake && \
     # TODO: rkimball build cuda/non-cuda builds
     echo "set(USE_CUDA ON)" >> config.cmake && \
-    echo "set(USE_CUDNN ON)" >> config.cmake && \
-    echo "set(USE_CUBLAS ON)" >> config.cmake && \
+    echo "set(USE_CUDNN OFF)" >> config.cmake && \
+    echo "set(USE_CUBLAS OFF)" >> config.cmake && \
     echo "set(USE_VULKAN OFF)" >> config.cmake && \
     echo "set(USE_PROFILER ON)" >> config.cmake && \
     echo "set(BUILD_STATIC_RUNTIME ON)" >> config.cmake && \
