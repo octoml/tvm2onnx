@@ -187,9 +187,13 @@ class RelayModel:
             ]
             compiler_flags.append("-lpthread")
             compiler_flags.append("-fPIC")
-            if "cuda" in tvm_target:
-                compiler_flags.append("-lcuda")
-                compiler_flags.append("-lcudart")
+            compiler_flags.append("-L/usr/local/cuda/lib64")
+            compiler_flags.append("-lcuda")
+            compiler_flags.append("-lcudart")
+            compiler_flags.append("-L/usr/lib/x86_64-linux-gnu")
+            compiler_flags.append("-lcudnn")
+            compiler_flags.append("-L/usr/local/cuda/lib64")
+            compiler_flags.append("-lcublas")
 
             if debug_build:
                 compiler_flags.append("-g")

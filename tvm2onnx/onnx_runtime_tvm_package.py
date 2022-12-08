@@ -163,7 +163,7 @@ class ONNXRuntimeTVMPackage:
                 f"-Wl,--whole-archive {self._tvm_runtime_lib} -Wl,--no-whole-archive",
                 "-Wl,--whole-archive model.o -Wl,--no-whole-archive",
             ]
-        self._compiler_flags += " " + " ".join(flags)
+        self._compiler_flags = " ".join(flags) + " " + self._compiler_flags
 
     @property
     def template_dir(self):
@@ -420,3 +420,4 @@ class ONNXRuntimeTVMPackage:
         cookiecutter.generate.generate_files(
             build_template_dir, {"cookiecutter": config}, build_dir
         )
+        breakpoint()
