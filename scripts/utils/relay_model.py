@@ -138,6 +138,7 @@ class RelayModel:
         metadata: typing.Dict[str, str] = {},
         debug_build: bool = False,
         use_zero_copy: bool = False,
+        package_path: str = None,
     ):
         """Builds the ONNX file and returns the path to the package.
 
@@ -153,7 +154,7 @@ class RelayModel:
             #    tvm_target,
             #    params=self.params,
             #)
-            model_lib_path = "/usr/tvm2onnx/tests/models/packaged.o"
+            model_lib_path = package_path
             # VM can be constructed directly from saved module.
             #vm_exec = tvm.runtime.load_module("/usr/tvm2onnx/tests/models/packaged.o")
 

@@ -124,19 +124,20 @@ def test_models_in_models_dir(model_name):
         for name, shape in relay_model.input_shapes.items():
             print(f"input {name}, shape {shape}")
         with tempfile.TemporaryDirectory() as tdir:
-            onnx_path = os.path.join("outputs", "test_model.tvm.onnx")
+            onnx_path = os.path.join("outputs", "vortex_fp16.tvm.onnx")
             relay_model.package_to_onnx(
-                name="vortex_fp32",
+                name="vortex_fp16",
                 tvm_target="llvm",
                 output_path=onnx_path,
+                package_path="./models/fp16_lib/packaged.o"
             )
 
             #model_dir = os.path.join(tdir, "model")
             model_dir = "outputs"
             with tarfile.open(onnx_path, "r") as tar:
                 tar.extractall(model_dir)
-            onnx_model_path = os.path.join(model_dir, "vortex_fp32.onnx")
-            custom_lib = os.path.join(model_dir, "custom_vortex_fp32.so")
+            onnx_model_path = os.path.join(model_dir, "vortex_fp16.onnx")
+            custom_lib = os.path.join(model_dir, "custom_vortex_fp16.so")
 
             input_data = {}
             for name, shape in relay_model.input_shapes.items():
@@ -179,4 +180,4 @@ def test_models_in_models_dir(model_name):
 
 
 if __name__ == "__main__":
-    test_models_in_models_dir("onnx_emails_int32_dummy_turing_vortex_fixed_v2.onnx")
+    test_models_in_models_dir("vortex_fp16.onnx")
