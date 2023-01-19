@@ -1,6 +1,8 @@
 """Tests ONNX Packaging."""
 import os
+import queue
 import tempfile
+import threading
 
 import numpy as np
 import onnx
@@ -133,6 +135,63 @@ def test_onnx_package():
         actual_product = output_data[1]
         assert np.allclose(sum, actual_sum)
         assert np.allclose(product, actual_product)
+
+
+def test_onnx_package_multithread():
+    with tempfile.TemporaryDirectory() as tdir:
+        # Package to Custom Op format and extract Custom Op ONNX file and Custom Op shared library
+        custom_op_model_name = "test_model"
+        custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
+        custom_op_model_dir = os.path.join(tdir, "model")
+
+        packaging_function(
+            custom_op_tar_path,
+            custom_op_model_dir,
+            onnx_model=onnx.load(_MODEL_PATH),
+            dynamic_axis_substitute=1,
+            name=custom_op_model_name,
+            tvm_target="llvm",
+            output_path=custom_op_tar_path,
+        )
+
+        # Run inference
+        input_data = {
+            "a": np.array(
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                dtype=np.float32,
+            ),
+            "b": np.array(
+                [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], dtype=np.float32
+            ),
+        }
+
+        def run_inferences(count, q):
+            for _ in range(count):
+                output_data = inference_function(
+                    custom_op_model_name, custom_op_model_dir, input_data
+                )
+            q.put(output_data)
+
+        THREAD_COUNT = 4
+        INFERENCE_COUNT = 100
+        q = queue.Queue()
+        threads = [
+            threading.Thread(target=run_inferences, args=(INFERENCE_COUNT, q))
+            for _ in range(THREAD_COUNT)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        for _ in range(THREAD_COUNT):
+            output_data = q.get()
+            sum = input_data["a"] + input_data["b"]
+            product = input_data["a"] * input_data["b"]
+            actual_sum = output_data[0]
+            actual_product = output_data[1]
+            assert np.allclose(sum, actual_sum)
+            assert np.allclose(product, actual_product)
 
 
 @pytest.mark.parametrize("debug_build", [False, True])

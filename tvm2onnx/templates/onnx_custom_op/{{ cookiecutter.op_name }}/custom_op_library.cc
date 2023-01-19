@@ -133,8 +133,8 @@ class TVMRunnerZeroCopy;
 
 class TVMRunnerBase {
  public:
-  TVMRunnerBase(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec) :
-    ort_(ort) {
+  TVMRunnerBase(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec, DLDevice dl_device) :
+    ort_(ort), dl_device(dl_device) {
       // Initialize the VM for the specified device. If the device is not a CPU,
       // We'll need to add a CPU context to drive it.
       vm.LoadExecutable(exec);
@@ -204,14 +204,13 @@ class TVMRunnerBase {
   Ort::CustomOpApi ort_;
   tvm::runtime::vm::VirtualMachine vm;
   TVMFuncsPtr funcs;
-  // TODO(vvchernov): define device type for specific case. define device id
-  DLDevice dl_device = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
+  DLDevice dl_device;
 };
 
 class TVMRunnerCopy : public TVMRunnerBase {
  public:
-  TVMRunnerCopy(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec) :
-    TVMRunnerBase(ort, exec) {}
+  TVMRunnerCopy(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec, DLDevice dl_device) :
+    TVMRunnerBase(ort, exec, dl_device) {}
 
   void run(OrtKernelContext* context) final {
     std::vector<tvm::runtime::NDArray> input_vec = GetInputTensors(context);
@@ -281,8 +280,8 @@ class TVMRunnerCopy : public TVMRunnerBase {
 
 class TVMRunnerZeroCopy : public TVMRunnerBase {
  public:
-  TVMRunnerZeroCopy(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec) :
-    TVMRunnerBase(ort, exec) {}
+  TVMRunnerZeroCopy(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec, DLDevice dl_device) :
+    TVMRunnerBase(ort, exec, dl_device) {}
 
   void run(OrtKernelContext* context) final {
     // Formally we should do set_input, set_outputs and run for the same func name
@@ -401,7 +400,7 @@ struct TVMRuntime {
       // During the first iteration we need to bind the late-bound constants to TVM, as
       // this is our first opportunity to access onnx constants.
       {
-        std::lock_guard<std::mutex> lock(constants_bound_mutex)
+        std::lock_guard<std::mutex> lock(constants_bound_mutex);
         if (!constants_bound)  {
           tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> const_map;
 
@@ -421,9 +420,9 @@ struct TVMRuntime {
       }
 
       if ({{ cookiecutter.use_zero_copy }}) {
-        runner = std::make_unique<TVMRunnerZeroCopy>(ort, exec);
+        runner = std::make_unique<TVMRunnerZeroCopy>(ort_, exec, dl_device);
       } else {
-        runner = std::make_unique<TVMRunnerCopy>(ort, exec);
+        runner = std::make_unique<TVMRunnerCopy>(ort_, exec, dl_device);
       }
     }
 
@@ -435,6 +434,8 @@ struct TVMRuntime {
   tvm::runtime::Module exec_mod;
   tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec;
   std::mutex constants_bound_mutex;
+  // TODO(vvchernov): define device type for specific case. define device id
+  DLDevice dl_device = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
   bool constants_bound = false;
 };
 
