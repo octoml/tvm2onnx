@@ -1,6 +1,9 @@
 """Tests ONNX Packaging."""
 import os
+import queue
 import tempfile
+import threading
+import time
 
 import numpy as np
 import onnx
@@ -95,7 +98,8 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     return c1_data, c2_data
 
 
-def test_onnx_package():
+@pytest.mark.parametrize("thread_count", [1, 4])
+def test_onnx_package(thread_count):
     with tempfile.TemporaryDirectory() as tdir:
         # Package to Custom Op format and extract Custom Op ONNX file and Custom Op shared library
         custom_op_model_name = "test_model"
@@ -123,16 +127,54 @@ def test_onnx_package():
             ),
         }
 
-        output_data = inference_function(
-            custom_op_model_name, custom_op_model_dir, input_data
+        run_inference = testing.get_run_with_custom_op(
+            os.path.join(custom_op_model_dir, f"{custom_op_model_name}.onnx"),
+            os.path.join(custom_op_model_dir, f"custom_{custom_op_model_name}.so"),
+            use_io_binding=False,
         )
 
-        sum = input_data["a"] + input_data["b"]
-        product = input_data["a"] * input_data["b"]
-        actual_sum = output_data[0]
-        actual_product = output_data[1]
-        assert np.allclose(sum, actual_sum)
-        assert np.allclose(product, actual_product)
+        threads_ready = threading.Semaphore()
+        ready_to_run_inference = threading.Event()
+
+        def run_inferences(duration_seconds, q):
+            threads_ready.release()
+            ready_to_run_inference.wait()
+
+            end = time.perf_counter() + duration_seconds
+            output_data = run_inference(input_data)
+            while time.perf_counter() < end:
+                output_data = run_inference(input_data)
+
+            q.put(output_data)
+
+        # Run inference long enough to make concurrent inference extremely likely
+        DURATION_SECONDS = 2
+        q = queue.Queue()
+        threads = [
+            threading.Thread(target=run_inferences, args=(DURATION_SECONDS, q))
+            for _ in range(thread_count)
+        ]
+
+        # Start the threads and wait for them to be ready
+        for t in threads:
+            t.start()
+            threads_ready.acquire()
+
+        # Let the threads run
+        ready_to_run_inference.set()
+
+        # Wait for the threads to complete
+        for t in threads:
+            t.join()
+
+        for _ in range(thread_count):
+            output_data = q.get()
+            sum = input_data["a"] + input_data["b"]
+            product = input_data["a"] * input_data["b"]
+            actual_sum = output_data[0]
+            actual_product = output_data[1]
+            assert np.allclose(sum, actual_sum)
+            assert np.allclose(product, actual_product)
 
 
 @pytest.mark.parametrize("debug_build", [False, True])

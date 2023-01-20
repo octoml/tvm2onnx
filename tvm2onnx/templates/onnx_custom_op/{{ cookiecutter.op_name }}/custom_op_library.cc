@@ -133,9 +133,46 @@ class TVMRunnerZeroCopy;
 
 class TVMRunnerBase {
  public:
-  TVMRunnerBase(const Ort::CustomOpApi& ort, TVMFuncsPtr pfuncs) :
-    ort_(ort),
-    funcs(std::move(pfuncs)) {}
+  TVMRunnerBase(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec, DLDevice dl_device) :
+    ort_(ort), dl_device(dl_device) {
+      // Initialize the VM for the specified device. If the device is not a CPU,
+      // We'll need to add a CPU context to drive it.
+      vm.LoadExecutable(exec);
+
+      int arity;
+      if (dl_device.device_type == kDLCPU) {
+        arity = 3;
+      } else {
+        arity = 6;
+      }
+      // Specify how to allocate memory for the target devices.
+      uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
+      // Create a variable length input to the packed function.
+      std::vector<TVMValue> init_vals(arity);
+      std::vector<int> codes(arity);
+      tvm::runtime::TVMArgsSetter setter(init_vals.data(), codes.data());
+      // Set up the main device context.
+      setter(0, (uint64_t(dl_device.device_type)));
+      setter(1, dl_device.device_id);
+      setter(2, alloc_type);
+      // Also initialize a CPU device context.
+      if (dl_device.device_type != kDLCPU) {
+        setter(3, (uint64_t(kDLCPU)));
+        setter(4, 0);
+        setter(5, alloc_type);
+      }
+      tvm::runtime::TVMRetValue rv;
+      // Call the packed func with the init arguments.
+      vm.GetFunction("init", nullptr)
+          .CallPacked(
+              tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
+
+      funcs = std::make_unique<TVMFuncs>(TVMFuncs{
+        vm.GetFunction("set_input", nullptr),
+        vm.GetFunction("set_outputs", nullptr),
+        vm.GetFunction("invoke", nullptr)
+      });
+    }
   virtual ~TVMRunnerBase() = default;
 
   // TODO(agladyshev): after PR#13215 we should use const Ort::KernelContext&
@@ -165,15 +202,15 @@ class TVMRunnerBase {
   }
 
   Ort::CustomOpApi ort_;
+  tvm::runtime::vm::VirtualMachine vm;
   TVMFuncsPtr funcs;
-  // TODO(vvchernov): define device type for specific case. define device id
-  DLDevice dl_device = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
+  DLDevice dl_device;
 };
 
 class TVMRunnerCopy : public TVMRunnerBase {
  public:
-  TVMRunnerCopy(const Ort::CustomOpApi& ort, TVMFuncsPtr pfuncs) :
-    TVMRunnerBase(ort, std::move(pfuncs)) {}
+  TVMRunnerCopy(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec, DLDevice dl_device) :
+    TVMRunnerBase(ort, exec, dl_device) {}
 
   void run(OrtKernelContext* context) final {
     std::vector<tvm::runtime::NDArray> input_vec = GetInputTensors(context);
@@ -243,8 +280,8 @@ class TVMRunnerCopy : public TVMRunnerBase {
 
 class TVMRunnerZeroCopy : public TVMRunnerBase {
  public:
-  TVMRunnerZeroCopy(const Ort::CustomOpApi& ort, TVMFuncsPtr pfuncs) :
-    TVMRunnerBase(ort, std::move(pfuncs)) {}
+  TVMRunnerZeroCopy(const Ort::CustomOpApi& ort, tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec, DLDevice dl_device) :
+    TVMRunnerBase(ort, exec, dl_device) {}
 
   void run(OrtKernelContext* context) final {
     // Formally we should do set_input, set_outputs and run for the same func name
@@ -336,19 +373,9 @@ class TVMRunnerZeroCopy : public TVMRunnerBase {
   }
 };
 
-std::unique_ptr<TVMRunnerBase> GetRunner(const Ort::CustomOpApi& ort, TVMFuncsPtr pfuncs, bool use_zero_copy) {
-  if (use_zero_copy) {
-    return std::make_unique<TVMRunnerZeroCopy>(ort, std::move(pfuncs));
-  } else {
-    return std::make_unique<TVMRunnerCopy>(ort, std::move(pfuncs));
-  }
-}
-
 struct TVMRuntime {
   TVMRuntime(const OrtApi& api)
       : ort_(api) {
-
-    use_zero_copy = {{ cookiecutter.use_zero_copy }};
 
     tvm::runtime::Module lib = tvm::runtime::Module::LoadFromFile(get_my_path());
 
@@ -365,72 +392,38 @@ struct TVMRuntime {
   ~TVMRuntime() {
   }
 
-  void LateBoundConstants(OrtKernelContext* context) {
-    tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> const_map;
-
-    // TODO(vvchernov): double RAM consumption?
-    {% for details in cookiecutter.initializers -%}
-    const OrtValue* _{{details.name}} = ort_.KernelContext_GetInput(context, {{details.index}});
-    const {{details.cpp_type}}* _{{details.name}}_ptr = ort_.GetTensorData<{{details.cpp_type}}>(_{{details.name}});
-    DLDataType _{{details.name}}_dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
-    tvm::runtime::NDArray _{{details.name}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device);
-    _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
-    const_map.Set("{{details.base_name}}", _{{details.name}}_ndarray);
-    {% endfor %}
-
-    // We can't LoadExecutable util we have added late-bound constants so the actual creation
-    // of loading takes place here.
-    // void Executable::LoadLateBoundConstantsFromMap(Map<String, NDArray> map)
-    // tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> runtime_map(const_map);
-    exec->LoadLateBoundConstantsFromMap(const_map);
-    vm.LoadExecutable(exec);
-
-    // Initialize the VM for the specified device. If the device is not a CPU,
-    // We'll need to add a CPU context to drive it.
-    int arity;
-    if (dl_device.device_type == kDLCPU) {
-      arity = 3;
-    } else {
-      arity = 6;
-    }
-    // Specify how to allocate memory for the target devices.
-    uint64_t alloc_type = uint64_t(tvm::runtime::vm::AllocatorType::kPooled);
-    // TODO: rkimball use proper device
-    uint64_t device_id = 0;
-    // Create a variable length input to the packed function.
-    std::vector<TVMValue> init_vals(arity);
-    std::vector<int> codes(arity);
-    tvm::runtime::TVMArgsSetter setter(init_vals.data(), codes.data());
-    // Set up the main device context.
-    setter(0, (uint64_t(dl_device.device_type)));
-    setter(1, device_id);
-    setter(2, alloc_type);
-    // Also initialize a CPU device context.
-    if (dl_device.device_type != kDLCPU) {
-      setter(3, (uint64_t(kDLCPU)));
-      setter(4, device_id);
-      setter(5, alloc_type);
-    }
-    tvm::runtime::TVMRetValue rv;
-    // Call the packed func with the init arguments.
-    vm.GetFunction("init", nullptr)
-        .CallPacked(
-            tvm::runtime::TVMArgs(init_vals.data(), codes.data(), arity), &rv);
-
-    TVMFuncsPtr funcs = std::make_unique<TVMFuncs>(TVMFuncs{
-      vm.GetFunction("set_input", nullptr),
-      vm.GetFunction("set_outputs", nullptr),
-      vm.GetFunction("invoke", nullptr)
-    });
-    runner = GetRunner(ort_, std::move(funcs), use_zero_copy);
-  }
-
   void Compute(OrtKernelContext* context) {
-    if (!constants_bound) {
-      // During the first iteration we need to bind the late-bound constants to TVM and
-      // create the VM. This is our first opportunity to access the onnx external constants.
-      LateBoundConstants(context);
-      constants_bound = true;
+    // ONNX Runtime custom ops are assumed to be thread-safe, so we create thread-local runners, and therefore
+    // thread-local TVM VirtualMachines.
+    static thread_local std::unique_ptr<TVMRunnerBase> runner;
+    if (!runner) {
+      // During the first iteration we need to bind the late-bound constants to TVM, as
+      // this is our first opportunity to access onnx constants.
+      {
+        std::lock_guard<std::mutex> lock(constants_bound_mutex);
+        if (!constants_bound)  {
+          tvm::runtime::Map<tvm::runtime::String, tvm::runtime::NDArray> const_map;
+
+          // TODO(vvchernov): double RAM consumption?
+          {% for details in cookiecutter.initializers -%}
+          const OrtValue* _{{details.name}} = ort_.KernelContext_GetInput(context, {{details.index}});
+          const {{details.cpp_type}}* _{{details.name}}_ptr = ort_.GetTensorData<{{details.cpp_type}}>(_{{details.name}});
+          DLDataType _{{details.name}}_dtype = tvm::runtime::String2DLDataType("{{details.numpy_dtype}}");
+          tvm::runtime::NDArray _{{details.name}}_ndarray = tvm::runtime::NDArray::Empty({{details.shape}}, _{{details.name}}_dtype, dl_device);
+          _{{details.name}}_ndarray.CopyFromBytes(_{{details.name}}_ptr, {{details.element_count}}*sizeof({{details.cpp_type}}));
+          const_map.Set("{{details.base_name}}", _{{details.name}}_ndarray);
+          {% endfor %}
+
+          exec->LoadLateBoundConstantsFromMap(const_map);
+          constants_bound = true;
+        }
+      }
+
+      if ({{ cookiecutter.use_zero_copy }}) {
+        runner = std::make_unique<TVMRunnerZeroCopy>(ort_, exec, dl_device);
+      } else {
+        runner = std::make_unique<TVMRunnerCopy>(ort_, exec, dl_device);
+      }
     }
 
     runner->run(context);
@@ -438,14 +431,12 @@ struct TVMRuntime {
 
  private:
   Ort::CustomOpApi ort_;
-  std::unique_ptr<TVMRunnerBase> runner;
-  tvm::runtime::vm::VirtualMachine vm;
   tvm::runtime::Module exec_mod;
   tvm::runtime::ObjectPtr<tvm::runtime::vm::Executable> exec;
+  std::mutex constants_bound_mutex;
   // TODO(vvchernov): define device type for specific case. define device id
   DLDevice dl_device = {DLDeviceType::{{ cookiecutter.dl_device_type }}, 0};
   bool constants_bound = false;
-  bool use_zero_copy = false;
 };
 
 struct TVMModelOp : Ort::CustomOpBase<TVMModelOp, TVMRuntime> {
