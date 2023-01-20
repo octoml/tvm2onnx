@@ -147,8 +147,8 @@ def test_onnx_package(thread_count):
 
             q.put(output_data)
 
-        # Run inference long enough to make contention extremely likely
-        DURATION_SECONDS = 0.5
+        # Run inference long enough to make concurrent inference extremely likely
+        DURATION_SECONDS = 2
         q = queue.Queue()
         threads = [
             threading.Thread(target=run_inferences, args=(DURATION_SECONDS, q))
