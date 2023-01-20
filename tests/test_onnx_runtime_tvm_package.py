@@ -133,7 +133,13 @@ def test_onnx_package(thread_count):
             use_io_binding=False,
         )
 
+        threads_ready = threading.Semaphore()
+        ready_to_run_inference = threading.Event()
+
         def run_inferences(duration_seconds, q):
+            threads_ready.release()
+            ready_to_run_inference.wait()
+
             end = time.perf_counter() + duration_seconds
             output_data = run_inference(input_data)
             while time.perf_counter() < end:
@@ -141,15 +147,23 @@ def test_onnx_package(thread_count):
 
             q.put(output_data)
 
-        # Run inference long enough to ~ensure contention
+        # Run inference long enough to make contention extremely likely
         DURATION_SECONDS = 0.5
         q = queue.Queue()
         threads = [
             threading.Thread(target=run_inferences, args=(DURATION_SECONDS, q))
             for _ in range(thread_count)
         ]
+
+        # Start the threads and wait for them to be ready
         for t in threads:
             t.start()
+            threads_ready.acquire()
+
+        # Let the threads run
+        ready_to_run_inference.set()
+
+        # Wait for the threads to complete
         for t in threads:
             t.join()
 
