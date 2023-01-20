@@ -3,6 +3,7 @@ import os
 import queue
 import tempfile
 import threading
+import time
 
 import numpy as np
 import onnx
@@ -97,7 +98,8 @@ def add_constant_onnx_model(model_dir, input_shape, dtype_str, uniform):
     return c1_data, c2_data
 
 
-def test_onnx_package():
+@pytest.mark.parametrize("thread_count", [1, 4])
+def test_onnx_package(thread_count):
     with tempfile.TemporaryDirectory() as tdir:
         # Package to Custom Op format and extract Custom Op ONNX file and Custom Op shared library
         custom_op_model_name = "test_model"
@@ -125,66 +127,33 @@ def test_onnx_package():
             ),
         }
 
-        output_data = inference_function(
-            custom_op_model_name, custom_op_model_dir, input_data
+        run_inference = testing.get_run_with_custom_op(
+            os.path.join(custom_op_model_dir, f"{custom_op_model_name}.onnx"),
+            os.path.join(custom_op_model_dir, f"custom_{custom_op_model_name}.so"),
+            use_io_binding=False,
         )
 
-        sum = input_data["a"] + input_data["b"]
-        product = input_data["a"] * input_data["b"]
-        actual_sum = output_data[0]
-        actual_product = output_data[1]
-        assert np.allclose(sum, actual_sum)
-        assert np.allclose(product, actual_product)
+        def run_inferences(duration_seconds, q):
+            end = time.perf_counter() + duration_seconds
+            output_data = run_inference(input_data)
+            while time.perf_counter() < end:
+                output_data = run_inference(input_data)
 
-
-def test_onnx_package_multithread():
-    with tempfile.TemporaryDirectory() as tdir:
-        # Package to Custom Op format and extract Custom Op ONNX file and Custom Op shared library
-        custom_op_model_name = "test_model"
-        custom_op_tar_path = os.path.join(tdir, f"{custom_op_model_name}.onnx")
-        custom_op_model_dir = os.path.join(tdir, "model")
-
-        packaging_function(
-            custom_op_tar_path,
-            custom_op_model_dir,
-            onnx_model=onnx.load(_MODEL_PATH),
-            dynamic_axis_substitute=1,
-            name=custom_op_model_name,
-            tvm_target="llvm",
-            output_path=custom_op_tar_path,
-        )
-
-        # Run inference
-        input_data = {
-            "a": np.array(
-                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-                dtype=np.float32,
-            ),
-            "b": np.array(
-                [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], dtype=np.float32
-            ),
-        }
-
-        def run_inferences(count, q):
-            for _ in range(count):
-                output_data = inference_function(
-                    custom_op_model_name, custom_op_model_dir, input_data
-                )
             q.put(output_data)
 
-        THREAD_COUNT = 4
-        INFERENCE_COUNT = 100
+        # Run inference long enough to ~ensure contention
+        DURATION_SECONDS = 0.5
         q = queue.Queue()
         threads = [
-            threading.Thread(target=run_inferences, args=(INFERENCE_COUNT, q))
-            for _ in range(THREAD_COUNT)
+            threading.Thread(target=run_inferences, args=(DURATION_SECONDS, q))
+            for _ in range(thread_count)
         ]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
 
-        for _ in range(THREAD_COUNT):
+        for _ in range(thread_count):
             output_data = q.get()
             sum = input_data["a"] + input_data["b"]
             product = input_data["a"] * input_data["b"]

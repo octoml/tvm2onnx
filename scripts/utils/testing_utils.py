@@ -97,54 +97,11 @@ def get_numpy_buffers(
     }
 
 
-def run(
-    engine: onnxruntime.InferenceSession, input_dict: typing.Dict[str, np.ndarray]
-) -> typing.List[np.ndarray]:
-    run_outputs = engine.run(output_names=None, input_feed=input_dict)
-
-    return run_outputs
-
-
-def run_with_iobinding(
-    engine: onnxruntime.InferenceSession,
-    input_dict: typing.Dict[str, np.ndarray],
-    output_buffers: typing.Dict[str, np.ndarray],
-) -> None:
-    # TODO(agladyshev): hardcoded values
-    device = "cpu"
-    device_id = 0
-
-    io_binding = engine.io_binding()
-
-    for input_name, input_value in input_dict.items():
-        io_binding.bind_input(
-            name=input_name,
-            device_type=device,
-            device_id=device_id,
-            element_type=str(input_value.dtype),
-            shape=input_value.shape,
-            buffer_ptr=input_value.ctypes.data,
-        )
-
-    for output_name, output_buffer in output_buffers.items():
-        io_binding.bind_output(
-            name=output_name,
-            device_type=device,
-            device_id=device_id,
-            element_type=str(output_buffer.dtype),
-            shape=output_buffer.shape,
-            buffer_ptr=output_buffer.ctypes.data,
-        )
-
-    engine.run_with_iobinding(io_binding)
-
-
-def run_with_custom_op(
+def get_run_with_custom_op(
     onnx_model_path: str,
     custom_lib: str,
-    input_data: typing.Dict[str, np.ndarray],
     use_io_binding: bool,
-) -> typing.List[np.ndarray]:
+) -> typing.Callable[[typing.Dict[str, np.ndarray]], typing.List[np.ndarray]]:
     sess_options = onnxruntime.SessionOptions()
     sess_options.register_custom_ops_library(custom_lib)
 
@@ -155,18 +112,46 @@ def run_with_custom_op(
         sess_options=sess_options,
     )
     if use_io_binding:
-        for input_name in input_data.keys():
-            input_data[input_name] = get_aligned_buffer(input_data[input_name])
 
-        output_buffers = get_numpy_buffers(get_output_meta(session))
+        def run_with_io_binding(input_data: typing.Dict[str, np.ndarray]):
+            for input_name in input_data.keys():
+                input_data[input_name] = get_aligned_buffer(input_data[input_name])
 
-        run_with_iobinding(session, input_data, output_buffers)
+            output_buffers = get_numpy_buffers(get_output_meta(session))
 
-        output_data = list(output_buffers.values())
+            # TODO(agladyshev): hardcoded values
+            device = "cpu"
+            device_id = 0
+
+            io_binding = session.io_binding()
+
+            for input_name, input_value in input_data.items():
+                io_binding.bind_input(
+                    name=input_name,
+                    device_type=device,
+                    device_id=device_id,
+                    element_type=str(input_value.dtype),
+                    shape=input_value.shape,
+                    buffer_ptr=input_value.ctypes.data,
+                )
+
+            for output_name, output_buffer in output_buffers.items():
+                io_binding.bind_output(
+                    name=output_name,
+                    device_type=device,
+                    device_id=device_id,
+                    element_type=str(output_buffer.dtype),
+                    shape=output_buffer.shape,
+                    buffer_ptr=output_buffer.ctypes.data,
+                )
+
+            session.run_with_iobinding(io_binding)
+
+            return list(output_buffers.values())
+
+        return run_with_io_binding
     else:
-        output_data = run(session, input_data)
-
-    return output_data
+        return lambda input_data: session.run(output_names=None, input_feed=input_data)
 
 
 def get_ort_output(
@@ -180,7 +165,9 @@ def get_ort_output(
     custom_lib = os.path.join(custom_op_model_dir, f"custom_{custom_op_model_name}.so")
 
     # Run inference
-    output = run_with_custom_op(onnx_model_path, custom_lib, input_data, use_io_binding)
+    output = get_run_with_custom_op(onnx_model_path, custom_lib, use_io_binding)(
+        input_data
+    )
 
     return output
 
