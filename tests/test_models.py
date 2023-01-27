@@ -132,7 +132,7 @@ def test_models_in_models_dir(model_name):
             model_dir = "outputs"
             with tarfile.open(onnx_path, "r") as tar:
                 tar.extractall(model_dir)
-            onnx_model_path = os.path.join(model_dir, "spacev5_fp16.onnx")
+            onnx_model_path = os.path.join(model_dir, "spacev5.onnx")
             custom_lib = os.path.join(model_dir, "custom_spacev5.so")
 
             input_data = {}
