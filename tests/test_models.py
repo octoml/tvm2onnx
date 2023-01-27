@@ -111,33 +111,29 @@ def test_models_in_models_dir(model_name):
         else:
             onnx_proto = load_model(model_path)
         shape_dict = {
-            "q_title_token_ids": [1, 512],
-            "q_title_token_types": [1, 512],
-            "q_title_token_masks": [1, 512],
+            "id__mask__segment": [3, 1, 512],
         }
         type_dict = {
-            "q_title_token_ids": "int32",
-            "q_title_token_types": "int32",
-            "q_title_token_masks": "int32",
+            "id__mask__segment": "int64",
         }
         relay_model = RelayModel.from_onnx(onnx_proto, input_shapes=shape_dict, input_dtypes=type_dict)
         for name, shape in relay_model.input_shapes.items():
             print(f"input {name}, shape {shape}")
         with tempfile.TemporaryDirectory() as tdir:
-            onnx_path = os.path.join("outputs", "vortex_fp16.tvm.onnx")
+            onnx_path = os.path.join("outputs", "spacev5.tvm.onnx")
             relay_model.package_to_onnx(
-                name="vortex_fp16",
+                name="spacev5",
                 tvm_target="llvm",
                 output_path=onnx_path,
-                package_path="./models/fp16_lib/packaged.o"
+                package_path="./models/space_lib/packaged.o"
             )
 
             #model_dir = os.path.join(tdir, "model")
             model_dir = "outputs"
             with tarfile.open(onnx_path, "r") as tar:
                 tar.extractall(model_dir)
-            onnx_model_path = os.path.join(model_dir, "vortex_fp16.onnx")
-            custom_lib = os.path.join(model_dir, "custom_vortex_fp16.so")
+            onnx_model_path = os.path.join(model_dir, "spacev5_fp16.onnx")
+            custom_lib = os.path.join(model_dir, "custom_spacev5.so")
 
             input_data = {}
             for name, shape in relay_model.input_shapes.items():
@@ -180,4 +176,4 @@ def test_models_in_models_dir(model_name):
 
 
 if __name__ == "__main__":
-    test_models_in_models_dir("vortex_fp16.onnx")
+    test_models_in_models_dir("spacev5_fp16.onnx")
