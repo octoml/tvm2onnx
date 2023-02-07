@@ -20,6 +20,7 @@ def tvm_load_late_bound_constants(self, consts_path):
             (0, 64, 1): "int64",
             (1, 32, 1): "uint32",
             (1, 64, 1): "uint64",
+            (2, 16, 1): "float16",
             (2, 32, 1): "float32",
             (2, 64, 1): "float64",
         }
