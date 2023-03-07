@@ -26,17 +26,17 @@ from tvm.autotvm.graph_tuner import DPTuner, PBQPTuner
 import tvm.contrib.graph_executor as runtime
 
 
-tuning_option = {
-    "log_filename": log_file,
-    "tuner": "random",
-    "early_stopping": None,
-    "measure_option": autotvm.measure_option(
-        builder=autotvm.LocalBuilder(),
-        runner=autotvm.LocalRunner(
-            number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
-        ),
-    ),
-}
+# tuning_option = {
+#     "log_filename": log_file,
+#     "tuner": "random",
+#     "early_stopping": None,
+#     "measure_option": autotvm.measure_option(
+#         builder=autotvm.LocalBuilder(),
+#         runner=autotvm.LocalRunner(
+#             number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
+#         ),
+#     ),
+# }
 
 
 # You can skip the implementation of this function for this tutorial.
@@ -102,6 +102,8 @@ def tune(model_path, target):
                 shape.append(val)
             input_shapes[input_name] = shape
 
+    print(input_shapes)
+
     mod, params = relay.frontend.from_onnx(
         onnx_model, shape=input_shapes, freeze_params=True
     )
@@ -123,13 +125,36 @@ def tune(model_path, target):
     log_file = "best_records.txt"
 
     # run tuning tasks
-    tune_kernels(
-        tasks,
-        log_filename=log_file,
-        tuner="random",
-        early_stopping=None,
-        measure_option=measure_option,
-    )
+    for i, task in enumerate(tasks):
+        prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
+
+        # tuner_obj = XGBTuner(task, loss_type="rank")
+        tuner_obj = XGBTuner(
+            task,
+            loss_type="rank",
+            feature_type="knob",
+        )
+
+        # do tuning
+        # n_trial = len(task.config_space)
+        n_trial = 1000
+        tuner_obj.tune(
+            n_trial=n_trial,
+            early_stopping=1e9,
+            measure_option=measure_option,
+            callbacks=[
+                autotvm.callback.progress_bar(n_trial, prefix=prefix),
+                autotvm.callback.log_to_file(log_file),
+            ],
+        )
+
+    # tune_kernels(
+    #     tasks,
+    #     log_filename=log_file,
+    #     # tuner="random",
+    #     early_stopping=None,
+    #     measure_option=measure_option,
+    # )
 
 
 
@@ -256,9 +281,9 @@ def main():  # pragma: no cover
     print(axis_map)
 
     tune(
-        model=args.model,
-        axis_map=axis_map,
-        target=tvm.target.Target("llvm -num-cores 8"),
+        model_path=args.model,
+        # axis_map=axis_map,
+        target=tvm.target.Target("llvm"),
     )
 
 

@@ -19,7 +19,7 @@ def tune(
     model,
     target: tvm.target.Target,
     axis_map: typing.Dict[str, int],
-    max_trials_global=128,
+    max_trials_global=1280,
 ):
     onnx_model = onnx.load(model)
     initializer_names = [n.name for n in onnx_model.graph.initializer]
@@ -38,15 +38,16 @@ def tune(
         onnx_model, shape=input_shapes, freeze_params=True
     )
 
-    with tempfile.TemporaryDirectory() as work_dir:
-        with target:
-            database = meta_schedule.relay_integration.tune_relay(
-                mod,
-                params,
-                target,
-                work_dir=work_dir,
-                max_trials_global=max_trials_global,
-            )
+    # with tempfile.TemporaryDirectory() as work_dir:
+    work_dir = "work_dir"
+    with target:
+        database = meta_schedule.relay_integration.tune_relay(
+            mod,
+            params,
+            target,
+            work_dir=work_dir,
+            max_trials_global=max_trials_global,
+        )
 
     print("Tuning Time:")
     return database
