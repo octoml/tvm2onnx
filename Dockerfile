@@ -41,9 +41,6 @@ ENV ORT_HOME="${THIRDPARTY_HOME}/onnxruntime"
 ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
-# Set to ascii to make stdout for subprocess.run in ascii. No funky chars.
-ENV LC_ALL="en_US.ascii"
-
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
 WORKDIR ${THIRDPARTY_HOME}
