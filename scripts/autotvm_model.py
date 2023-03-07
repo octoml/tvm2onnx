@@ -26,24 +26,21 @@ from tvm.autotvm.graph_tuner import DPTuner, PBQPTuner
 import tvm.contrib.graph_executor as runtime
 
 
-# tuning_option = {
-#     "log_filename": log_file,
-#     "tuner": "random",
-#     "early_stopping": None,
-#     "measure_option": autotvm.measure_option(
-#         builder=autotvm.LocalBuilder(),
-#         runner=autotvm.LocalRunner(
-#             number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
-#         ),
-#     ),
-# }
+tuning_option = {
+    "log_filename": "tuning_records.log",
+    "measure_option": autotvm.measure_option(
+        builder=autotvm.LocalBuilder(),
+        runner=autotvm.LocalRunner(
+            number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
+        ),
+    ),
+}
 
 
 # You can skip the implementation of this function for this tutorial.
 def tune_kernels(
-    tasks, measure_option, early_stopping=None, log_filename="tuning.log"
+    tasks, measure_option, log_filename
 ):
-
     for i, task in enumerate(tasks):
         prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
 
@@ -53,7 +50,7 @@ def tune_kernels(
         n_trial = len(task.config_space)
         tuner_obj.tune(
             n_trial=n_trial,
-            early_stopping=early_stopping,
+            early_stopping=None,
             measure_option=measure_option,
             callbacks=[
                 autotvm.callback.progress_bar(n_trial, prefix=prefix),
@@ -125,28 +122,35 @@ def tune(model_path, target):
     log_file = "best_records.txt"
 
     # run tuning tasks
-    for i, task in enumerate(tasks):
-        prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
+    measure_option = autotvm.measure_option(
+        builder=autotvm.LocalBuilder(),
+        runner=autotvm.LocalRunner(
+            number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
+        ),
+    )
+    tune_kernels(tasks, log_filename="tuning_records.log", measure_option=measure_option)
+    # for i, task in enumerate(tasks):
+    #     prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
 
-        # tuner_obj = XGBTuner(task, loss_type="rank")
-        tuner_obj = XGBTuner(
-            task,
-            loss_type="rank",
-            feature_type="knob",
-        )
+    #     # tuner_obj = XGBTuner(task, loss_type="rank")
+    #     tuner_obj = XGBTuner(
+    #         task,
+    #         loss_type="rank",
+    #         feature_type="knob",
+    #     )
 
-        # do tuning
-        # n_trial = len(task.config_space)
-        n_trial = 1000
-        tuner_obj.tune(
-            n_trial=n_trial,
-            early_stopping=1e9,
-            measure_option=measure_option,
-            callbacks=[
-                autotvm.callback.progress_bar(n_trial, prefix=prefix),
-                autotvm.callback.log_to_file(log_file),
-            ],
-        )
+    #     # do tuning
+    #     # n_trial = len(task.config_space)
+    #     n_trial = 1000
+    #     tuner_obj.tune(
+    #         n_trial=n_trial,
+    #         early_stopping=1e9,
+    #         measure_option=measure_option,
+    #         callbacks=[
+    #             autotvm.callback.progress_bar(n_trial, prefix=prefix),
+    #             autotvm.callback.log_to_file(log_file),
+    #         ],
+    #     )
 
     # tune_kernels(
     #     tasks,

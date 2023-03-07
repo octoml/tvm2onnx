@@ -6,10 +6,8 @@ import re
 import tvm
 import tvm.meta_schedule.measure_callback as measure_callback
 from tvm import meta_schedule, nd, relay
-from tvm.contrib import graph_executor
 from tvm.meta_schedule import database as ms_database
 from tvm.relay import vm
-from tvm.runtime import profiler_vm
 from tvm.runtime import vm as vm_rt
 
 import onnx
@@ -18,8 +16,7 @@ import onnx
 def tune(
     model,
     target: tvm.target.Target,
-    axis_map: typing.Dict[str, int],
-    max_trials_global=1280,
+    axis_map: typing.Dict[str, int]
 ):
     onnx_model = onnx.load(model)
     initializer_names = [n.name for n in onnx_model.graph.initializer]
@@ -38,18 +35,20 @@ def tune(
         onnx_model, shape=input_shapes, freeze_params=True
     )
 
-    # with tempfile.TemporaryDirectory() as work_dir:
-    work_dir = "work_dir"
-    with target:
-        database = meta_schedule.relay_integration.tune_relay(
-            mod,
-            params,
-            target,
-            work_dir=work_dir,
-            max_trials_global=max_trials_global,
-        )
+    with tempfile.TemporaryDirectory() as work_dir:
+        with target:
+            database = meta_schedule.relay_integration.tune_relay(
+                mod,
+                params,
+                target,
+                work_dir=work_dir,
+                max_trials_global=1000,
+                num_trials_per_iter=64,
+                max_trials_per_task=64
+            )
 
-    print("Tuning Time:")
+    print("Tuning Complete")
+    breakpoint()
     return database
 
 
