@@ -113,7 +113,7 @@ class ONNXRuntimeTVMPackage:
         self,
         model_name: str,
         tvm_runtime_lib: pathlib.Path,
-        model_so: pathlib.Path,
+        model_object: pathlib.Path,
         model_ro: pathlib.Path,
         constants_map: typing.Dict[str, np.ndarray],
         input_shapes: InputShapes,
@@ -131,7 +131,7 @@ class ONNXRuntimeTVMPackage:
 
         :param model_name: the package name
         :param tvm_runtime_lib: the path to the static TVM runtime lib
-        :param model_so: the path to the compiled model.so
+        :param model_object: the path to the compiled model object file
         :param model_ro: the path to the compiled model.ro
         :param constants_map: the map of named constants
         :param input_shapes: the input shapes
@@ -146,7 +146,7 @@ class ONNXRuntimeTVMPackage:
         """
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
-        self._model_so = model_so
+        self._model_object = model_object
         self._model_ro = model_ro
         self._constants_map = constants_map
         self._input_shapes = input_shapes
@@ -350,7 +350,7 @@ class ONNXRuntimeTVMPackage:
         shutil.move(os.path.join(source, "custom_op_library.def"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
         try:
-            shutil.copy(self._model_so, os.path.join(target, "model.o"))
+            shutil.copy(self._model_object, os.path.join(target, "model.o"))
         except shutil.SameFileError:
             pass
         try:

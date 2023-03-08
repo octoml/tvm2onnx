@@ -48,7 +48,6 @@ def tune(
             )
 
     print("Tuning Complete")
-    breakpoint()
     return database
 
 
@@ -78,11 +77,19 @@ def main():  # pragma: no cover
         axis_map[m[1]] = int(m[2])
     print(axis_map)
 
-    tune(
+    database = tune(
         model=args.model,
         axis_map=axis_map,
         target=tvm.target.Target("llvm -num-cores 8"),
     )
+
+    records = []
+    for workload in self._mod_hashes_to_workloads.values():
+        top_k = self.get_top_k(workload, 1)
+        if top_k:
+            records.append(top_k[0])
+    return records
+
 
 
 if __name__ == "__main__":  # pragma: no cover

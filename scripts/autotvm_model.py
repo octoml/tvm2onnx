@@ -2,11 +2,14 @@ import argparse
 import tempfile
 import typing
 import re
+import copy
+import pathlib
+import pickle
 
 import tvm
 import tvm.meta_schedule.measure_callback as measure_callback
 from tvm import meta_schedule, nd, relay
-from tvm.contrib import graph_executor
+from tvm.contrib import cc
 from tvm.meta_schedule import database as ms_database
 from tvm.relay import vm
 from tvm.runtime import profiler_vm
@@ -61,7 +64,34 @@ def evaluate_performance(lib, data_shape):
     print(module.benchmark(dev, number=100, repeat=3))
 
 
-def tune(model_path, target):
+def compile_tvm_model(relay_model, params, tvm_target, best_records):
+    with autotvm.apply_history_best(best_records):
+        with tvm.transform.PassContext(
+            opt_level=3,
+            config={"relay.FuseOps.max_depth": 30},
+        ):
+            return vm.compile(
+                relay_model,
+                tvm_target,
+                params=params,
+            )
+
+
+def partial_link_build_func(tvm_target: tvm.target.Target):
+    """Gets a TVM build function for creating a partially-linked object file
+
+    :param tvm_target: the TVM target
+    :return: a function to be passed to `export_library`
+    """
+    # -r performs partial (or incremental) linking which links a set of object
+    # files into a single object file
+    return cc.cross_compiler(
+        lambda *args, **kwargs: cc.create_executable(*args, **kwargs, cc="g++"),
+        options=["-r"],
+    )
+
+
+def tune(model_path, tvm_target, output_path, axis_map={}):
     # extract workloads from relay program
     print("Extract tasks...")
     onnx_model = onnx.load(model_path)
@@ -72,8 +102,8 @@ def tune(model_path, target):
             input_name, _, dtype, axis_names = relay.frontend.onnx.get_info(i)
             shape = []
             for val in axis_names:
-                # if val in axis_map.keys():
-                #     val = axis_map[val]
+                if val in axis_map.keys():
+                    val = axis_map[val]
                 shape.append(val)
             input_shapes[input_name] = shape
 
@@ -84,7 +114,7 @@ def tune(model_path, target):
     )
 
     tasks = autotvm.task.extract_from_program(
-        mod["main"], target=target, params=params, ops=(relay.op.get("nn.conv2d"),)
+        mod["main"], target=tvm_target, params=params, ops=(relay.op.get("nn.conv2d"),)
     )
 
     measure_option=autotvm.measure_option(
@@ -97,8 +127,6 @@ def tune(model_path, target):
         ),
     )
 
-    log_file = "best_records.txt"
-
     # run tuning tasks
     log_filename="tuning_records.log"
     for i, task in enumerate(tasks):
@@ -107,7 +135,7 @@ def tune(model_path, target):
         tuner_obj = XGBTuner(task, loss_type="rank")
 
         # do tuning
-        n_trial = len(task.config_space)
+        n_trial = 16
         tuner_obj.tune(
             n_trial=n_trial,
             early_stopping=None,
@@ -118,103 +146,48 @@ def tune(model_path, target):
             ],
         )
 
+    best_records_file = "best_records.log"
 
+    autotvm.record.pick_best(log_filename, best_records_file)
+    best_records = []
+    with open(best_records_file, "r") as f:
+        tuning_records = f.readlines()
+        best_records = list(map(autotvm.record.decode, tuning_records))
 
+    with autotvm.apply_history_best(best_records):
+        with tvm.transform.PassContext(
+            opt_level=3,
+            config={"relay.FuseOps.max_depth": 30},
+        ):
+            vm_exec = vm.compile(
+                mod=copy.deepcopy(mod),
+                target=tvm_target,
+                params=params,
+            )
 
-    # tune_graph(mod["main"], data_shape, log_file, graph_opt_sch_file)
+    tdir_path = pathlib.Path(output_path)
+    constants_map = {
+        name: data.numpy()
+        for name, data in vm_exec.get_late_bound_consts(0).items()
+    }
+    ro_path = tdir_path / "vm_exec_code.ro"
+    model_object = tdir_path / "model.o"
+    constants_path = tdir_path / "constants.pkl"
 
-    # # compile kernels in default mode
-    # print("Evaluation of the network compiled in 'default' mode without auto tune:")
-    # with tvm.transform.PassContext(opt_level=3):
-    #     print("Compile...")
-    #     lib = relay.build(mod, target=target, params=params)
-    #     evaluate_performance(lib, data_shape)
+    vm_exec_code, mod = vm_exec.save()
+    with open(ro_path, "wb") as fo:
+        fo.write(vm_exec_code)
 
-    # # compile kernels in kernel tuned only mode
-    # print("\nEvaluation of the network been tuned on kernel level:")
-    # with autotvm.apply_history_best(log_file):
-    #     print("Compile...")
-    #     with tvm.transform.PassContext(opt_level=3):
-    #         lib = relay.build(mod, target=target, params=params)
-    #     evaluate_performance(lib, data_shape)
+    mod.export_library(
+        model_object,
+        fcompile=partial_link_build_func(tvm_target),
+    )
 
-    # # compile kernels with graph-level best records
-    # print("\nEvaluation of the network been tuned on graph level:")
-    # with autotvm.apply_graph_best(graph_opt_sch_file):
-    #     print("Compile...")
-    #     with tvm.transform.PassContext(opt_level=3):
-    #         lib = relay.build_module.build(mod, target=target, params=params)
-    #     evaluate_performance(lib, data_shape)
+    with open(constants_path, 'wb') as f:
+        pickle.dump(constants_map, f)
 
-
-# We do not run the tuning in our webpage server since it takes too long.
-# Uncomment the following line to run it by yourself.
-
-# tune_and_evaluate(tuning_option)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def tune(
-#     model,
-#     target: tvm.target.Target,
-#     axis_map: typing.Dict[str, int],
-#     max_trials_global=128,
-# ):
-#     onnx_model = onnx.load(model)
-#     initializer_names = [n.name for n in onnx_model.graph.initializer]
-#     input_shapes = {}
-#     for i in onnx_model.graph.input:
-#         if i.name not in initializer_names:
-#             input_name, _, dtype, axis_names = relay.frontend.onnx.get_info(i)
-#             shape = []
-#             for val in axis_names:
-#                 if val in axis_map.keys():
-#                     val = axis_map[val]
-#                 shape.append(val)
-#             input_shapes[input_name] = shape
-
-#     mod, params = relay.frontend.from_onnx(
-#         onnx_model, shape=input_shapes, freeze_params=True
-#     )
-
-#     with tempfile.TemporaryDirectory() as work_dir:
-#         with target:
-#             database = meta_schedule.relay_integration.tune_relay(
-#                 mod,
-#                 params,
-#                 target,
-#                 work_dir=work_dir,
-#                 max_trials_global=max_trials_global,
-#             )
-
-#     print("Tuning Time:")
-#     return database
-
+    # with open('saved_dictionary.pkl', 'rb') as f:
+    #     loaded_dict = pickle.load(f)
 
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Tune an onnx model with TVM.")
@@ -224,9 +197,9 @@ def main():  # pragma: no cover
         help="Source model in .onnx format",
     )
     parser.add_argument(
-        "--output",
+        "--output-path",
         required=True,
-        help="Output file in tvm in onnx format.",
+        help="Output path where model.o and vm_exec_code.ro files are saved",
     )
     parser.add_argument(
         "--axis-size",
@@ -242,10 +215,15 @@ def main():  # pragma: no cover
         axis_map[m[1]] = int(m[2])
     print(axis_map)
 
+    if not os.path.exists(args.output_path):
+        print("The --output-path must exist")
+        exit(1)
+
     tune(
         model_path=args.model,
-        # axis_map=axis_map,
-        target=tvm.target.Target("llvm"),
+        output_path=args.output_path,
+        axis_map=axis_map,
+        tvm_target=tvm.target.Target("llvm"),
     )
 
 
