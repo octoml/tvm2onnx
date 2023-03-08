@@ -37,28 +37,6 @@ tuning_option = {
 }
 
 
-# You can skip the implementation of this function for this tutorial.
-def tune_kernels(
-    tasks, measure_option, log_filename
-):
-    for i, task in enumerate(tasks):
-        prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
-
-        tuner_obj = XGBTuner(task, loss_type="rank")
-
-        # do tuning
-        n_trial = len(task.config_space)
-        tuner_obj.tune(
-            n_trial=n_trial,
-            early_stopping=None,
-            measure_option=measure_option,
-            callbacks=[
-                autotvm.callback.progress_bar(n_trial, prefix=prefix),
-                autotvm.callback.log_to_file(log_filename),
-            ],
-        )
-
-
 # Use graph tuner to achieve graph level optimal schedules
 # Set use_DP=False if it takes too long to finish.
 def tune_graph(graph, dshape, records, opt_sch_file, use_DP=True):
@@ -117,48 +95,28 @@ def tune(model_path, target):
             min_repeat_ms=0,
             enable_cpu_cache_flush=True
         ),
-    ),
+    )
 
     log_file = "best_records.txt"
 
     # run tuning tasks
-    measure_option = autotvm.measure_option(
-        builder=autotvm.LocalBuilder(),
-        runner=autotvm.LocalRunner(
-            number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
-        ),
-    )
-    tune_kernels(tasks, log_filename="tuning_records.log", measure_option=measure_option)
-    # for i, task in enumerate(tasks):
-    #     prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
+    log_filename="tuning_records.log"
+    for i, task in enumerate(tasks):
+        prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
 
-    #     # tuner_obj = XGBTuner(task, loss_type="rank")
-    #     tuner_obj = XGBTuner(
-    #         task,
-    #         loss_type="rank",
-    #         feature_type="knob",
-    #     )
+        tuner_obj = XGBTuner(task, loss_type="rank")
 
-    #     # do tuning
-    #     # n_trial = len(task.config_space)
-    #     n_trial = 1000
-    #     tuner_obj.tune(
-    #         n_trial=n_trial,
-    #         early_stopping=1e9,
-    #         measure_option=measure_option,
-    #         callbacks=[
-    #             autotvm.callback.progress_bar(n_trial, prefix=prefix),
-    #             autotvm.callback.log_to_file(log_file),
-    #         ],
-    #     )
-
-    # tune_kernels(
-    #     tasks,
-    #     log_filename=log_file,
-    #     # tuner="random",
-    #     early_stopping=None,
-    #     measure_option=measure_option,
-    # )
+        # do tuning
+        n_trial = len(task.config_space)
+        tuner_obj.tune(
+            n_trial=n_trial,
+            early_stopping=None,
+            measure_option=measure_option,
+            callbacks=[
+                autotvm.callback.progress_bar(n_trial, prefix=prefix),
+                autotvm.callback.log_to_file(log_filename),
+            ],
+        )
 
 
 
