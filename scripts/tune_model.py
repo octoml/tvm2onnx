@@ -1,8 +1,9 @@
 import argparse
+import re
 import tempfile
 import typing
-import re
 
+import onnx
 import tvm
 import tvm.meta_schedule.measure_callback as measure_callback
 from tvm import meta_schedule, nd, relay
@@ -10,14 +11,8 @@ from tvm.meta_schedule import database as ms_database
 from tvm.relay import vm
 from tvm.runtime import vm as vm_rt
 
-import onnx
 
-
-def tune(
-    model,
-    target: tvm.target.Target,
-    axis_map: typing.Dict[str, int]
-):
+def tune(model, target: tvm.target.Target, axis_map: typing.Dict[str, int]):
     onnx_model = onnx.load(model)
     initializer_names = [n.name for n in onnx_model.graph.initializer]
     input_shapes = {}
@@ -44,7 +39,7 @@ def tune(
                 work_dir=work_dir,
                 max_trials_global=1000,
                 num_trials_per_iter=64,
-                max_trials_per_task=64
+                max_trials_per_task=64,
             )
 
     print("Tuning Complete")
@@ -73,7 +68,7 @@ def main():  # pragma: no cover
 
     axis_map = {}
     if args.axis_size:
-        m = re.match("(.+)=(\d+)", args.axis_size)
+        m = re.match("(.+)=(\\d+)", args.axis_size)
         axis_map[m[1]] = int(m[2])
     print(axis_map)
 
@@ -89,7 +84,6 @@ def main():  # pragma: no cover
         if top_k:
             records.append(top_k[0])
     return records
-
 
 
 if __name__ == "__main__":  # pragma: no cover

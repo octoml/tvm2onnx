@@ -1,80 +1,17 @@
 import argparse
-import tempfile
-import typing
-import re
 import copy
+import os
 import pathlib
 import pickle
-
-import tvm
-import tvm.meta_schedule.measure_callback as measure_callback
-from tvm import meta_schedule, nd, relay
-from tvm.contrib import cc
-from tvm.meta_schedule import database as ms_database
-from tvm.relay import vm
-from tvm.runtime import profiler_vm
-from tvm.runtime import vm as vm_rt
+import re
+import tempfile
 
 import onnx
-
-
-import os
-import numpy as np
-
 import tvm
-from tvm import relay, autotvm
-from tvm.relay import testing
-from tvm.autotvm.tuner import XGBTuner, GATuner, RandomTuner, GridSearchTuner
-from tvm.autotvm.graph_tuner import DPTuner, PBQPTuner
-import tvm.contrib.graph_executor as runtime
-
-
-tuning_option = {
-    "log_filename": "tuning_records.log",
-    "measure_option": autotvm.measure_option(
-        builder=autotvm.LocalBuilder(),
-        runner=autotvm.LocalRunner(
-            number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
-        ),
-    ),
-}
-
-
-# Use graph tuner to achieve graph level optimal schedules
-# Set use_DP=False if it takes too long to finish.
-def tune_graph(graph, dshape, records, opt_sch_file, use_DP=True):
-    target_op = [
-        relay.op.get("nn.conv2d"),
-    ]
-    Tuner = DPTuner if use_DP else PBQPTuner
-    executor = Tuner(graph, {input_name: dshape}, records, target_op, target)
-    executor.benchmark_layout_transform(min_exec_num=2000)
-    executor.run()
-    executor.write_opt_sch2record_file(opt_sch_file)
-
-def evaluate_performance(lib, data_shape):
-    # upload parameters to device
-    dev = tvm.cpu()
-    data_tvm = tvm.nd.array((np.random.uniform(size=data_shape)).astype(dtype))
-    module = runtime.GraphModule(lib["default"](dev))
-    module.set_input(input_name, data_tvm)
-
-    # evaluate
-    print("Evaluate inference time cost...")
-    print(module.benchmark(dev, number=100, repeat=3))
-
-
-def compile_tvm_model(relay_model, params, tvm_target, best_records):
-    with autotvm.apply_history_best(best_records):
-        with tvm.transform.PassContext(
-            opt_level=3,
-            config={"relay.FuseOps.max_depth": 30},
-        ):
-            return vm.compile(
-                relay_model,
-                tvm_target,
-                params=params,
-            )
+from tvm import autotvm, relay
+from tvm.autotvm.tuner import XGBTuner
+from tvm.contrib import cc
+from tvm.relay import vm
 
 
 def partial_link_build_func(tvm_target: tvm.target.Target):
@@ -117,42 +54,40 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
         mod["main"], target=tvm_target, params=params, ops=(relay.op.get("nn.conv2d"),)
     )
 
-    measure_option=autotvm.measure_option(
+    measure_option = autotvm.measure_option(
         builder=autotvm.LocalBuilder(),
         runner=autotvm.LocalRunner(
-            number=1,
-            repeat=10,
-            min_repeat_ms=0,
-            enable_cpu_cache_flush=True
+            number=1, repeat=10, min_repeat_ms=0, enable_cpu_cache_flush=True
         ),
     )
 
     # run tuning tasks
-    log_filename="tuning_records.log"
-    for i, task in enumerate(tasks):
-        prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
+    with tempfile.NamedTemporaryFile() as full_records_tmp:
+        with tempfile.NamedTemporaryFile() as best_records_tmp:
+            full_records_file = full_records_tmp.name
+            best_records_file = best_records_tmp.name
+            for i, task in enumerate(tasks):
+                prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
 
-        tuner_obj = XGBTuner(task, loss_type="rank")
+                tuner_obj = XGBTuner(task, loss_type="rank")
 
-        # do tuning
-        n_trial = 16
-        tuner_obj.tune(
-            n_trial=n_trial,
-            early_stopping=None,
-            measure_option=measure_option,
-            callbacks=[
-                autotvm.callback.progress_bar(n_trial, prefix=prefix),
-                autotvm.callback.log_to_file(log_filename),
-            ],
-        )
+                # do tuning
+                n_trial = 16
+                tuner_obj.tune(
+                    n_trial=n_trial,
+                    early_stopping=None,
+                    measure_option=measure_option,
+                    callbacks=[
+                        autotvm.callback.progress_bar(n_trial, prefix=prefix),
+                        autotvm.callback.log_to_file(full_records_file),
+                    ],
+                )
 
-    best_records_file = "best_records.log"
-
-    autotvm.record.pick_best(log_filename, best_records_file)
-    best_records = []
-    with open(best_records_file, "r") as f:
-        tuning_records = f.readlines()
-        best_records = list(map(autotvm.record.decode, tuning_records))
+            autotvm.record.pick_best(full_records_file, best_records_file)
+            best_records = []
+            with open(best_records_file, "r") as f:
+                tuning_records = f.readlines()
+                best_records = list(map(autotvm.record.decode, tuning_records))
 
     with autotvm.apply_history_best(best_records):
         with tvm.transform.PassContext(
@@ -167,8 +102,7 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
 
     tdir_path = pathlib.Path(output_path)
     constants_map = {
-        name: data.numpy()
-        for name, data in vm_exec.get_late_bound_consts(0).items()
+        name: data.numpy() for name, data in vm_exec.get_late_bound_consts(0).items()
     }
     ro_path = tdir_path / "vm_exec_code.ro"
     model_object = tdir_path / "model.o"
@@ -183,11 +117,12 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
         fcompile=partial_link_build_func(tvm_target),
     )
 
-    with open(constants_path, 'wb') as f:
+    with open(constants_path, "wb") as f:
         pickle.dump(constants_map, f)
 
     # with open('saved_dictionary.pkl', 'rb') as f:
     #     loaded_dict = pickle.load(f)
+
 
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Tune an onnx model with TVM.")
@@ -211,10 +146,11 @@ def main():  # pragma: no cover
 
     axis_map = {}
     if args.axis_size:
-        m = re.match("(.+)=(\d+)", args.axis_size)
+        m = re.match("(.+)=(\\d+)", args.axis_size)
         axis_map[m[1]] = int(m[2])
     print(axis_map)
 
+    os.makedirs(args.output_path, exist_ok=True)
     if not os.path.exists(args.output_path):
         print("The --output-path must exist")
         exit(1)

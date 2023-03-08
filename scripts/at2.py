@@ -1,6 +1,6 @@
 import tvm.auto_scheduler as auto_scheduler
-from tvm.autotvm.tuner import XGBTuner
 from tvm import autotvm
+from tvm.autotvm.tuner import XGBTuner
 
 number = 10
 repeat = 1
