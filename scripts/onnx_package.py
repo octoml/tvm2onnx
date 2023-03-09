@@ -54,11 +54,6 @@ def package(
 
     compiler_flags: typing.List[str] = ["-fPIC"]
 
-    # tvm_dir = pathlib.Path(os.path.dirname(tvm.__file__)).parent.parent
-    # compiler_flags.append(f"-I{tvm_dir / '3rdparty/dmlc-core/include'}")
-    # compiler_flags.append(f"-I{tvm_dir / '3rdparty/dlpack/include'}")
-    # compiler_flags.append(f"-I{tvm_dir / 'include'}")
-
     if tvm_target.kind.name == "cuda":
         compiler_flags.append("-L/usr/local/cuda/lib64")
         compiler_flags.append("-lcuda")
@@ -79,20 +74,6 @@ def package(
 
     # Required for ONNXRuntime headers
     compiler_flags.append("-fms-extensions")
-
-    # mtriple = (tvm_target.host or tvm_target).attrs.get("mtriple")
-    # if mtriple == "aarch64-linux-gnu":
-    #     compiler_flags.append("--target=aarch64-linux-gnu")
-    #     for include_path in utils.cross_compiler_cpp_include_search_paths(
-    #         "aarch64-linux-gnu"
-    #     ):
-    #         compiler_flags.append(f"-I{include_path}")
-    # elif mtriple == "armv8l-linux-gnueabihf":
-    #     compiler_flags.append("--target=arm-linux-gnueabihf")
-    #     for include_path in utils.cross_compiler_cpp_include_search_paths(
-    #         "arm-linux-gnueabihf"
-    #     ):
-    #         compiler_flags.append(f"-I{include_path}")
 
 
     with tempfile.TemporaryDirectory() as build_dir:

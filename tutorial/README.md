@@ -23,7 +23,7 @@ NOTE: This tutorial is geared to build TVM for CPU only. To use a GPU you will n
 
 The following command should be run from a directory which will be referred to as PROJECT_ROOT in this document. For this tutorial we will use PROJECT_ROOT=~/tvm2onnx_tutorial
 
-```
+```bash
 mkdir ~/tvm2onnx_tutorial
 cd ~/tvm2onnx_tutorial
 git clone --recursive https://github.com/apache/tvm.git
@@ -41,14 +41,45 @@ When done, the build will produce both *libtvm.so* and *libtvm_runtime.a* in the
 
 ## Tuning Your TVM Model
 
-```
+```bash
 python scripts/autotvm_model.py --model tutorial/super-resolution.onnx --output opt_model --axis-size batch_size=1
 ```
 
 ## Convert Your TVM Model to ONNX
 
-```
-python scripts/onnx_package.py --model opt_model/model.o --ro opt_model/vm_exec_code.ro --constants opt_model/constants.pkl --metadata opt_model/metadata.json --tvm-runtime 3rdparty/tvm/build/libtvm_runtime.a --output demo.onnx
+```bash
+python scripts/onnx_package.py --model opt_model/model.o --ro opt_model/vm_exec_code.ro --constants opt_model/constants.pkl --metadata opt_model/metadata.json --tvm-runtime 3rdparty/tvm/build/libtvm_runtime.a --output demo.onnx.tar
 ```
 
 ## Run Your New ONNX Model with onnxruntime
+
+After converting the model to .onnx format you should have a demo.onnx.tar file. This tar file contains the .onnx model file along with external constants and the tvm models custom op shared library. To run the model in onnx first untar the file to a directory
+```bash
+mkdir demo_model
+tar -xf demo.onnx.tar -C demo_model
+```
+The demo_model directory will contain the following files. The const files may be named differently.
+* const_10
+* const_14
+* const_20
+* const_4
+* custom_demo.so
+* demo.onnx
+
+|![](demo_model.png "Converted model in netron.app")|
+|:--:|
+|*A view of demo.onnx in netron.app*|
+
+The entire TVM-compiled model is contained in the node *demo* which is implemented as an onnxruntime custom operator.
+
+To run the model use the following python code. The function *register_custom_ops_library* registers the model's custom op library with onnxruntime.
+```python
+sess_options = onnxruntime.SessionOptions()
+sess_options.register_custom_ops_library(<path to custom op>)
+engine = onnxruntime.InferenceSession(
+    onnx_path,
+    providers=["CPUExecutionProvider"],
+    provider_options=[{}],
+    sess_options=sess_options,
+)
+```
