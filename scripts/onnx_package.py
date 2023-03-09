@@ -20,47 +20,122 @@ These ONNX wrapped TVM models can be run using onnx_benchmark.py.
 import argparse
 import logging
 import pathlib
+import pickle
+import os
+import json
 
 import onnx
 from utils.relay_model import RelayModel
-from utils.setup_logging import setup_logging
+from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
 
 logging.basicConfig(level=logging.DEBUG)
 
 
 def package(
     model_path: str,
+    ro_path: str,
+    constants_path: str,
+    metadata_path: str,
+    tvm_runtime: str,
     output_path: str,
-    debug_build: bool,
 ):
-    relay_model = RelayModel.from_onnx(onnx.load(model_path), dynamic_axis_substitute=1)
-    relay_model.package_to_onnx(
-        "mnist",
-        tvm_target="llvm",
-        output_path=pathlib.Path(output_path),
-        debug_build=debug_build,
+    with open(constants_path, 'rb') as f:
+        constants_map = pickle.load(f)
+
+    with open(metadata_path, 'r') as f:
+        metadata = json.load(f)
+
+    input_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["inputs"]}
+    input_dtypes = {tensor["name"]: tensor["dtype"] for tensor in metadata["inputs"]}
+    output_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["outputs"]}
+    output_dtypes = {tensor["name"]: tensor["dtype"] for tensor in metadata["outputs"]}
+
+    packager = ONNXRuntimeTVMPackage(
+        model_name="demo",
+        tvm_runtime_lib=tvm_runtime,
+        model_object=model_path,
+        model_ro=ro_path,
+        constants_map=constants_map,
+        input_shapes=input_shapes,
+        input_dtypes=input_dtypes,
+        output_shapes=output_shapes,
+        output_dtypes=output_dtypes,
+        dl_device_type=metadata["device"],
     )
 
+    result = packager.build_package(output_path)
+    breakpoint()
+    pass
 
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Package a tuned TVM model to ONNX.")
     parser.add_argument(
-        "--input",
+        "--model",
         required=True,
-        help="Model TVM file.",
+        help="A compiled model.o.",
+    )
+    parser.add_argument(
+        "--ro",
+        required=True,
+        help="The model's .ro file.",
+    )
+    parser.add_argument(
+        "--constants",
+        required=True,
+        help="The model's constants pickle file.",
+    )
+    parser.add_argument(
+        "--metadata",
+        required=True,
+        help="The model's metadata.json file.",
+    )
+    parser.add_argument(
+        "--tvm-runtime",
+        required=True,
+        help="The libtvm_runtime.a file.",
     )
     parser.add_argument(
         "--output",
         required=True,
         help="Output file in ONNX tar format.",
     )
-    parser.add_argument(
-        "--debug", action="store_true", default=False, help="Create a debug build"
-    )
     args = parser.parse_args()
 
-    setup_logging()
-    package(model_path=args.input, output_path=args.output, debug_build=args.debug)
+    model_path = os.path.abspath(args.model)
+    ro_path = os.path.abspath(args.ro)
+    constants_path = os.path.abspath(args.constants)
+    tvm_runtime_path = os.path.abspath(args.tvm_runtime)
+    metadata_path = os.path.abspath(args.metadata)
+    output_path = os.path.abspath(args.output)
+
+    if not os.path.exists(model_path):
+        print("model file does not exist")
+        exit(1)
+
+    if not os.path.exists(ro_path):
+        print("ro file does not exist")
+        exit(1)
+
+    if not os.path.exists(constants_path):
+        print("constants file does not exist")
+        exit(1)
+
+    if not os.path.exists(tvm_runtime_path):
+        print("tvm runtime file does not exist")
+        exit(1)
+
+    if not os.path.exists(metadata_path):
+        print("metadata file does not exist")
+        exit(1)
+
+    package(
+        model_path=model_path,
+        ro_path=ro_path,
+        constants_path=constants_path,
+        metadata_path=metadata_path,
+        tvm_runtime=tvm_runtime_path,
+        output_path=output_path
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

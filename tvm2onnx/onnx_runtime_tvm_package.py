@@ -23,6 +23,7 @@ import tarfile
 import typing
 import uuid
 from tempfile import TemporaryDirectory
+import shutil
 
 import cookiecutter.generate
 import numpy as np
@@ -182,7 +183,7 @@ class ONNXRuntimeTVMPackage:
     @property
     def template_dir(self):
         """The template dir to copy and modify for this package job."""
-        from . import get_templates_dir
+        from tvm2onnx import get_templates_dir
 
         return get_templates_dir()
 
@@ -363,6 +364,7 @@ class ONNXRuntimeTVMPackage:
             LOG.debug("custom op library generated: " + f.read())
         result = subprocess.run(["make"], capture_output=True, cwd=make_dir, text=True)
         if not result.returncode == 0:
+            breakpoint()
             err = result.stderr
             LOG.error("Error compiling custom op library:\n" + err)
             raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
@@ -425,7 +427,7 @@ class ONNXRuntimeTVMPackage:
         :param build_dir: path to the build directory.
         """
         # Copy the template dir to the build dir.
-        build_template_dir = build_dir / os.path.basename(self.template_dir)
+        build_template_dir = os.path.join(build_dir, os.path.basename(self.template_dir))
         shutil.copytree(self.template_dir, build_template_dir)
 
         cookiecutter.generate.generate_files(

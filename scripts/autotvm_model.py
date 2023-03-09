@@ -5,6 +5,7 @@ import pathlib
 import pickle
 import re
 import tempfile
+import json
 
 import onnx
 import tvm
@@ -28,12 +29,11 @@ def partial_link_build_func(tvm_target: tvm.target.Target):
     )
 
 
-def tune(model_path, tvm_target, output_path, axis_map={}):
-    # extract workloads from relay program
-    print("Extract tasks...")
-    onnx_model = onnx.load(model_path)
+def get_io_info(onnx_model, axis_map):
     initializer_names = [n.name for n in onnx_model.graph.initializer]
-    input_shapes = {}
+    inputs = []
+    outputs = []
+
     for i in onnx_model.graph.input:
         if i.name not in initializer_names:
             input_name, _, dtype, axis_names = relay.frontend.onnx.get_info(i)
@@ -42,9 +42,28 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
                 if val in axis_map.keys():
                     val = axis_map[val]
                 shape.append(val)
-            input_shapes[input_name] = shape
+            inputs.append({"name": input_name, "shape": shape, "dtype": dtype})
+    for o in onnx_model.graph.output:
+        output_name, _, dtype, axis_names = relay.frontend.onnx.get_info(o)
+        shape = []
+        for val in axis_names:
+            if val in axis_map.keys():
+                val = axis_map[val]
+            shape.append(val)
+        outputs.append({"name": output_name, "shape": shape, "dtype": dtype})
 
-    print(input_shapes)
+    return {"inputs": inputs, "outputs": outputs}
+
+
+def tune(model_path, tvm_target, output_path, axis_map={}):
+    # extract workloads from relay program
+    tvm_target = tvm.target.Target(tvm_target)
+    dl_device_type="kDLCUDA" if tvm_target.kind.name == "cuda" else "kDLCPU"
+    print("Extract tasks...")
+    onnx_model = onnx.load(model_path)
+    metadata = get_io_info(onnx_model, axis_map)
+    metadata["device"] = dl_device_type
+    input_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["inputs"]}
 
     mod, params = relay.frontend.from_onnx(
         onnx_model, shape=input_shapes, freeze_params=True
@@ -107,6 +126,7 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
     ro_path = tdir_path / "vm_exec_code.ro"
     model_object = tdir_path / "model.o"
     constants_path = tdir_path / "constants.pkl"
+    metadata_path = tdir_path / "metadata.json"
 
     vm_exec_code, mod = vm_exec.save()
     with open(ro_path, "wb") as fo:
@@ -120,8 +140,8 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
     with open(constants_path, "wb") as f:
         pickle.dump(constants_map, f)
 
-    # with open('saved_dictionary.pkl', 'rb') as f:
-    #     loaded_dict = pickle.load(f)
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f)
 
 
 def main():  # pragma: no cover
