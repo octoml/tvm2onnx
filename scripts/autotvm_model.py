@@ -63,6 +63,7 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
     onnx_model = onnx.load(model_path)
     metadata = get_io_info(onnx_model, axis_map)
     metadata["device"] = dl_device_type
+    metadata["target"] = str(tvm_target)
     input_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["inputs"]}
 
     mod, params = relay.frontend.from_onnx(
@@ -108,6 +109,7 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
                 tuning_records = f.readlines()
                 best_records = list(map(autotvm.record.decode, tuning_records))
 
+    # Compile the tuned model
     with autotvm.apply_history_best(best_records):
         with tvm.transform.PassContext(
             opt_level=3,

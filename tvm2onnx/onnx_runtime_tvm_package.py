@@ -145,6 +145,9 @@ class ONNXRuntimeTVMPackage:
         :param use_zero_copy:
             the flag that enables build of custom op using zero copy method for output tensors
         """
+        if not isinstance(compiler_flags, str):
+            print("compiler_flags must be a str")
+            exit(1)
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
         self._model_object = model_object

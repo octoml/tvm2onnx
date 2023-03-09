@@ -22,6 +22,7 @@ RUN apt-get update --fix-missing && \
     apt-get install -y \
         build-essential \
         clang-12 \
+        lld-12 \
         git \
         libopenblas-dev \
         gcc-aarch64-linux-gnu
@@ -57,8 +58,6 @@ RUN git clone \
     -b v1.14.1 \
     --depth 1 \
     https://github.com/microsoft/onnxruntime.git
-ENV C_INCLUDE_PATH=${THIRDPARTY_HOME}/onnxruntime/include
-ENV CPLUS_INCLUDE_PATH=${THIRDPARTY_HOME}/onnxruntime/include:/usr/tvm2onnx/3rdparty/tvm/3rdparty/dmlc-core/include:/usr/tvm2onnx/3rdparty/tvm/3rdparty/dlpack/include:/usr/tvm2onnx/3rdparty/tvm/include
 
 WORKDIR ${TVM2ONNX_HOME}
 COPY pyproject.toml poetry.lock ./
@@ -98,6 +97,8 @@ ENV PATH=/usr/local/cuda/bin:/usr/local/nvidia/bin:${PATH}
 # AWS: /usr/lib/x86_64-linux-gnu (must be added earlier than /usr/local/cuda/compat/lib.real)
 #
 ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/compat/lib.real:/opt/intel/openvino_2021/inference_engine/lib/intel64/:/opt/intel/openvino_2021.4.689/deployment_tools/ngraph/lib/:/opt/intel/openvino_2021.4.689/deployment_tools/inference_engine/external/tbb/lib/
+ENV C_INCLUDE_PATH=${THIRDPARTY_HOME}/onnxruntime/include
+ENV CPLUS_INCLUDE_PATH=${THIRDPARTY_HOME}/onnxruntime/include:/usr/tvm2onnx/3rdparty/tvm/3rdparty/dmlc-core/include:/usr/tvm2onnx/3rdparty/tvm/3rdparty/dlpack/include:/usr/tvm2onnx/3rdparty/tvm/include
 
 COPY . /usr/tvm2onnx
 WORKDIR /usr/tvm2onnx

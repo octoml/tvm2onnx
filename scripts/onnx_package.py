@@ -23,9 +23,9 @@ import pathlib
 import pickle
 import os
 import json
+import typing
 
-import onnx
-from utils.relay_model import RelayModel
+import tvm
 from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
 
 logging.basicConfig(level=logging.DEBUG)
@@ -49,6 +49,50 @@ def package(
     input_dtypes = {tensor["name"]: tensor["dtype"] for tensor in metadata["inputs"]}
     output_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["outputs"]}
     output_dtypes = {tensor["name"]: tensor["dtype"] for tensor in metadata["outputs"]}
+    tvm_target = tvm.target.Target(metadata["target"])
+
+    compiler_flags: typing.List[str] = ["-fPIC"]
+
+    # tvm_dir = pathlib.Path(os.path.dirname(tvm.__file__)).parent.parent
+    # compiler_flags.append(f"-I{tvm_dir / '3rdparty/dmlc-core/include'}")
+    # compiler_flags.append(f"-I{tvm_dir / '3rdparty/dlpack/include'}")
+    # compiler_flags.append(f"-I{tvm_dir / 'include'}")
+
+    if tvm_target.kind.name == "cuda":
+        compiler_flags.append("-L/usr/local/cuda/lib64")
+        compiler_flags.append("-lcuda")
+        compiler_flags.append("-lcudart")
+    if "cudnn" in tvm_target.libs:
+        compiler_flags.append("-L/usr/lib/x86_64-linux-gnu")
+        compiler_flags.append("-lcudnn")
+    if "cublas" in tvm_target.libs:
+        compiler_flags.append("-L/usr/local/cuda/lib64")
+        compiler_flags.append("-lcublas")
+    if "cblas" in tvm_target.libs:
+        compiler_flags.append("-L/lib/x86_64-linux-gnu")
+        compiler_flags.append("-lopenblas")
+
+    # ld segfaults when cross-compiling via tvm2onnx to ARM; use clang + lld instead.
+    compiler = "clang++-12"
+    compiler_flags.append("-fuse-ld=lld")
+
+    # Required for ONNXRuntime headers
+    compiler_flags.append("-fms-extensions")
+
+    # mtriple = (tvm_target.host or tvm_target).attrs.get("mtriple")
+    # if mtriple == "aarch64-linux-gnu":
+    #     compiler_flags.append("--target=aarch64-linux-gnu")
+    #     for include_path in utils.cross_compiler_cpp_include_search_paths(
+    #         "aarch64-linux-gnu"
+    #     ):
+    #         compiler_flags.append(f"-I{include_path}")
+    # elif mtriple == "armv8l-linux-gnueabihf":
+    #     compiler_flags.append("--target=arm-linux-gnueabihf")
+    #     for include_path in utils.cross_compiler_cpp_include_search_paths(
+    #         "arm-linux-gnueabihf"
+    #     ):
+    #         compiler_flags.append(f"-I{include_path}")
+
 
     packager = ONNXRuntimeTVMPackage(
         model_name="demo",
@@ -61,6 +105,8 @@ def package(
         output_shapes=output_shapes,
         output_dtypes=output_dtypes,
         dl_device_type=metadata["device"],
+        compiler=compiler,
+        compiler_flags=" ".join(compiler_flags),
     )
 
     result = packager.build_package(output_path)
