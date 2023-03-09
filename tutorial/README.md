@@ -42,7 +42,6 @@ When done, the build will produce both *libtvm.so* and *libtvm_runtime.a* in the
 ## Tuning Your TVM Model
 
 ```
-python scripts/tune_model.py --model tutorial/super-resolution.onnx --output tuned --axis-size batch_size=1
 python scripts/autotvm_model.py --model tutorial/super-resolution.onnx --output opt_model --axis-size batch_size=1
 ```
 
