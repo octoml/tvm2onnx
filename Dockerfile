@@ -57,7 +57,8 @@ RUN git clone \
     -b v1.14.1 \
     --depth 1 \
     https://github.com/microsoft/onnxruntime.git
-COPY onnxruntime/include/onnxruntime/core /usr/include/onnxruntime/core
+RUN mkdir -p /usr/include/onnxruntime/core && \
+    cp -r onnxruntime/include/onnxruntime/core/* /usr/include/onnxruntime/core/
 
 WORKDIR ${TVM2ONNX_HOME}
 COPY pyproject.toml poetry.lock ./
