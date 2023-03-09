@@ -19,16 +19,17 @@ These ONNX wrapped TVM models can be run using onnx_benchmark.py.
 
 import argparse
 import logging
-import pathlib
 import pickle
 import os
 import json
 import typing
+import tempfile
+import shutil
 
 import tvm
 from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 
 def package(
@@ -94,24 +95,24 @@ def package(
     #         compiler_flags.append(f"-I{include_path}")
 
 
-    packager = ONNXRuntimeTVMPackage(
-        model_name="demo",
-        tvm_runtime_lib=tvm_runtime,
-        model_object=model_path,
-        model_ro=ro_path,
-        constants_map=constants_map,
-        input_shapes=input_shapes,
-        input_dtypes=input_dtypes,
-        output_shapes=output_shapes,
-        output_dtypes=output_dtypes,
-        dl_device_type=metadata["device"],
-        compiler=compiler,
-        compiler_flags=" ".join(compiler_flags),
-    )
+    with tempfile.TemporaryDirectory() as build_dir:
+        packager = ONNXRuntimeTVMPackage(
+            model_name="demo",
+            tvm_runtime_lib=tvm_runtime,
+            model_object=model_path,
+            model_ro=ro_path,
+            constants_map=constants_map,
+            input_shapes=input_shapes,
+            input_dtypes=input_dtypes,
+            output_shapes=output_shapes,
+            output_dtypes=output_dtypes,
+            dl_device_type=metadata["device"],
+            compiler=compiler,
+            compiler_flags=" ".join(compiler_flags),
+        )
 
-    result = packager.build_package(output_path)
-    breakpoint()
-    pass
+        result = packager.build_package(build_dir)
+        shutil.copy(result, output_path)
 
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Package a tuned TVM model to ONNX.")

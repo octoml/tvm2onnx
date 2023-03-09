@@ -48,7 +48,7 @@ python scripts/autotvm_model.py --model tutorial/super-resolution.onnx --output 
 ## Convert Your TVM Model to ONNX
 
 ```
-python scripts/onnx_package.py --model opt_model/model.o --ro opt_model/vm_exec_code.ro --constants opt_model/constants.pkl --metadata opt_model/metadata.json --tvm-runtime 3rdparty/tvm/build/libtvm_runtime.a --output demo_dir
+python scripts/onnx_package.py --model opt_model/model.o --ro opt_model/vm_exec_code.ro --constants opt_model/constants.pkl --metadata opt_model/metadata.json --tvm-runtime 3rdparty/tvm/build/libtvm_runtime.a --output demo.onnx
 ```
 
 ## Run Your New ONNX Model with onnxruntime
