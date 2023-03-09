@@ -43,13 +43,13 @@ When done, the build will produce both *libtvm.so* and *libtvm_runtime.a* in the
 
 ```
 python scripts/tune_model.py --model tutorial/super-resolution.onnx --output tuned --axis-size batch_size=1
-python scripts/autotvm_model.py --model tutorial/super-resolution.onnx --output xxx --axis-size batch_size=1
+python scripts/autotvm_model.py --model tutorial/super-resolution.onnx --output opt_model --axis-size batch_size=1
 ```
 
 ## Convert Your TVM Model to ONNX
 
 ```
-python scripts/onnx_package.py --model xxx/model.o --ro xxx/vm_exec_code.ro --constants xxx/constants.pkl --metadata xxx/metadata.json --tvm-runtime 3rdparty/tvm/build/libtvm_runtime.a --output demo.onnx
+python scripts/onnx_package.py --model opt_model/model.o --ro opt_model/vm_exec_code.ro --constants opt_model/constants.pkl --metadata opt_model/metadata.json --tvm-runtime 3rdparty/tvm/build/libtvm_runtime.a --output demo_dir
 ```
 
 ## Run Your New ONNX Model with onnxruntime
