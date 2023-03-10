@@ -8,6 +8,8 @@ extension. With this installed you can click the green status display in the low
 of VSCode and select "Open in Remove Container". This should build the docker container and
 launch an interactive session. Testing and developer tools lint and format are designed to work
 in this container.
+## Tutorial
+There is a [tutorial](tutorial/README.md) which demonstrates a simple end-to-end example of tuning, converting the tuned model to onnx using tvm2onnx, and then running inference on the TVM-in-ONNX model using onnxruntime.
 ## Developing
 Code development should be done in the docker container as it maintains all project dependencies.
 While it may be possible to develop without using the docker container that is not supported.
