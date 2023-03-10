@@ -28,13 +28,11 @@ RUN apt-get update --fix-missing && \
 
 # Install a more modern cmake version
 WORKDIR /usr
-RUN mkdir cmake_build && \
-    cd cmake_build && \
-    curl -OL https://github.com/Kitware/CMake/releases/download/v3.23.3/cmake-3.23.3-linux-x86_64.sh && \
-    chmod +x cmake-3.23.3-linux-x86_64.sh && \
-    ./cmake-3.23.3-linux-x86_64.sh --skip-license --prefix=/usr && \
-    cd .. && \
-    rm -rf cmake_build
+RUN wget --no-check-certificate -q https://github.com/Kitware/CMake/releases/download/v3.25.2/cmake-3.25.2-linux-x86_64.sh && \
+    chmod +x cmake-3.25.2-linux-x86_64.sh && \
+    ./cmake-3.25.2-linux-x86_64.sh --skip-license --prefix=/usr/local && \
+    rm -rf cmake-3.25.2-linux-x86_64.sh
+
 
 ENV TVM2ONNX_HOME="/usr/tvm2onnx"
 ENV THIRDPARTY_HOME="${TVM2ONNX_HOME}/3rdparty"
@@ -59,7 +57,7 @@ RUN git clone \
 
 WORKDIR ${THIRDPARTY_HOME}
 RUN git clone \
-    -b v1.12.1 \
+    -b v1.14.1 \
     --depth 1 \
     https://github.com/microsoft/onnxruntime.git
 

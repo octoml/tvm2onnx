@@ -16,6 +16,7 @@ import os
 import pathlib
 import tarfile
 import tempfile
+import typing
 
 import numpy as np
 import onnx
@@ -36,7 +37,7 @@ _MACOS_EXTENDED_ATTRIBUTE_FILE_PREFIX = "._"
 
 def load_model_from_tar_file(
     model_tar_path: pathlib.Path, output_dir
-) -> onnx.ModelProto:
+) -> typing.Tuple[onnx.ModelProto, str]:
     """Extracts an onnx model from the given bytes if they represent a tarfile.
     :param model_bytes: the bytes to extract a model from.
     :return: the onnx model extracted from the tarfile bytes.
@@ -97,7 +98,7 @@ def load_model(model_path):
     if not os.path.exists(model_path):
         raise Exception(f"File '{model_path}' not found")
     if tarfile.is_tarfile(str(model_path)):
-        onnx_proto = load_model_from_tar_file(model_tar_path=model_path)
+        onnx_proto, _ = load_model_from_tar_file(model_tar_path=model_path)
         LOG.info("ONNXModel successfully loaded from tar file")
     else:
         onnx_proto = onnx.load_model(str(model_path))
