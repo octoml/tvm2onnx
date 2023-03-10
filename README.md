@@ -1,5 +1,5 @@
 # tvm2onnx
-Convert pre-optimized-and-compiled TVM models to .onnx format for execution in ONNX Runtime.
+Use this tvm2onnx integration to convert pre-optimized-and-compiled TVM models to .onnx format for execution in ONNX Runtime. How this integration works at a high level is that it represents TVM optimizations in the form of a custom operator that ONNX Runtime can execute.
 
 ## Getting Started
 This project is designed to run in a docker container and integrate with Visual Studio Code. For
