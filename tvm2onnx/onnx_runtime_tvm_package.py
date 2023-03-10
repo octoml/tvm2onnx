@@ -27,7 +27,6 @@ from tempfile import TemporaryDirectory
 import cookiecutter.generate
 import numpy as np
 import onnx
-from onnx import numpy_helper
 from onnx.external_data_helper import convert_model_to_external_data
 from onnx.helper import (
     TensorProto,
@@ -36,6 +35,7 @@ from onnx.helper import (
     make_node,
     make_tensor,
     make_tensor_value_info,
+    np_dtype_to_tensor_dtype,
 )
 
 from tvm2onnx.error import PackagingError
@@ -317,15 +317,15 @@ class ONNXRuntimeTVMPackage:
         for name in self._input_dtypes.keys():
             shape = self._input_shapes[name]
             dtype = self._input_dtypes[name]
-            tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
+            tensortype = np_dtype_to_tensor_dtype(np.dtype(dtype))
             tensor = make_tensor_value_info(name, tensortype, shape)
             input_tensors.append(tensor)
             custom_op_input_names.append(name)
 
         for name in self._output_dtypes.keys():
-            tensortype = numpy_helper.mapping.NP_TYPE_TO_TENSOR_TYPE[
+            tensortype = np_dtype_to_tensor_dtype(
                 np.dtype(self._output_dtypes[name])
-            ]
+            )
             tensor = make_tensor_value_info(name, tensortype, self._output_shapes[name])
             output_tensors.append(tensor)
             output_names.append(name)
