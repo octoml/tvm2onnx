@@ -1,17 +1,22 @@
 # Tutorial
-## Docker
+## Environment setup: Docker
 This tutorial is designed to be run from inside a docker container generated from Dockerfile in
-the root directory. You will need to have docker installed and running. The container can be built and via
+the root directory. You will need to have docker installed and running. The container can be built and run via
 ```
 docker build -t tvm2onnx -f Dockerfile .
 docker run -ti tvm2onnx
 ```
-## For vscode users
-This repository is designed to work well with vscode and it's [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) and this is how the project has been developed. If you are using vscode and don't have
-an Nvidia GPU then comment out line 11 in .devcontainer.json which referes to gpus.
+
+Note that the build process could take around 30 minutes for the first-time user.
+
+## Environment setup: VSCode
+This repository is designed to work well with vscode and its [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) and this is how the project has been developed. If you are using vscode and don't have
+an Nvidia GPU then comment out line 11 in .devcontainer.json
 ```
         "--gpus", "all",
 ```
+## GPU access
+If you do not have access to the GPU, when running the tvm2onnx container you will see a warning about Nvidia drivers not being detected. This warning does not prevent you from continuing with the following steps.
 
 ## Introduction
 In this tutorial we will walk through the end-to-end process of
