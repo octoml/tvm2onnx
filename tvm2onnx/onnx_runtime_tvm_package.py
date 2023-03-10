@@ -323,9 +323,7 @@ class ONNXRuntimeTVMPackage:
             custom_op_input_names.append(name)
 
         for name in self._output_dtypes.keys():
-            tensortype = np_dtype_to_tensor_dtype(
-                np.dtype(self._output_dtypes[name])
-            )
+            tensortype = np_dtype_to_tensor_dtype(np.dtype(self._output_dtypes[name]))
             tensor = make_tensor_value_info(name, tensortype, self._output_shapes[name])
             output_tensors.append(tensor)
             output_names.append(name)
