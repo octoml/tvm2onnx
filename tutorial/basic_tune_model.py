@@ -6,6 +6,7 @@ import pathlib
 import pickle
 import re
 import tempfile
+import typing
 
 import onnx
 import tvm
@@ -41,6 +42,12 @@ def get_io_info(onnx_model, axis_map):
             for val in axis_names:
                 if val in axis_map.keys():
                     val = axis_map[val]
+                elif val % 1 != 0:  # is integer
+                    print(
+                        f"Model has dynamic input axis {axis_names} which must be defined. "
+                        f"Use '--axis-size {val}=N' where N is an integer."
+                    )
+                    exit(1)
                 shape.append(val)
             inputs.append({"name": input_name, "shape": shape, "dtype": dtype})
     for o in onnx_model.graph.output:
@@ -49,31 +56,53 @@ def get_io_info(onnx_model, axis_map):
         for val in axis_names:
             if val in axis_map.keys():
                 val = axis_map[val]
+            elif val % 1 != 0:  # is integer
+                print(
+                    f"Model has dynamic input axis {axis_names} which must be defined. "
+                    f"Use '--axis-size {val}=N' where N is an integer."
+                )
+                exit(1)
             shape.append(val)
         outputs.append({"name": output_name, "shape": shape, "dtype": dtype})
 
     return {"inputs": inputs, "outputs": outputs}
 
 
-def tune(model_path, tvm_target, output_path, axis_map={}):
-    # extract workloads from relay program
+def tune(
+    model_path: str,
+    tvm_target: tvm.target.Target,
+    output_path: str,
+    axis_map: typing.Dict[str, int] = {},
+) -> None:
+    """
+    Tune an onnx model using TVM's autotune. The tuning results and metadata required by tvm2onnx
+        are saved in output_path.
+    :param model_path: Path to the source model in .onnx format.
+    :param tvm_target: The tvm target information used for tuning.
+    :param output_path: Directory where the tuning results are stored.
+    :param axis_map: TVM requires static input shapes. If a model has named dynamic axes specify
+        the axis name and its static value to used for tuning, like {"batch_size": 4}
+    :return: None
+    """
+    # Generate some metadata required by tvm2onnx
     tvm_target = tvm.target.Target(tvm_target)
-    dl_device_type = "kDLCUDA" if tvm_target.kind.name == "cuda" else "kDLCPU"
-    print("Extract tasks...")
     onnx_model = onnx.load(model_path)
     metadata = get_io_info(onnx_model, axis_map)
-    metadata["device"] = dl_device_type
     metadata["target"] = str(tvm_target)
     input_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["inputs"]}
 
+    # Convert the onnx model to Relay. This Relay graph is used as input to the TVM tuning process.
     mod, params = relay.frontend.from_onnx(
         onnx_model, shape=input_shapes, freeze_params=True
     )
 
+    # Extract tuning tasks from the Relay graph. A task is equivalent to a kernel or function
+    # containing multiple Relay operators.
     tasks = autotvm.task.extract_from_program(
         mod["main"], target=tvm_target, params=params, ops=(relay.op.get("nn.conv2d"),)
     )
 
+    # Measurement options are used duing to tuning process to measure the performance of each task.
     measure_option = autotvm.measure_option(
         builder=autotvm.LocalBuilder(),
         runner=autotvm.LocalRunner(
@@ -81,11 +110,13 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
         ),
     )
 
-    # run tuning tasks
+    # Start the tuning process. Temporary files are used to store the tuning records generated
+    # by the tuning process and another for the best solution for each task.
     with tempfile.NamedTemporaryFile() as full_records_tmp:
         with tempfile.NamedTemporaryFile() as best_records_tmp:
             full_records_file = full_records_tmp.name
             best_records_file = best_records_tmp.name
+            # Loop through all tuning tasks and display progress.
             for i, task in enumerate(tasks):
                 prefix = "[Task %2d/%2d] " % (i + 1, len(tasks))
 
@@ -103,13 +134,16 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
                     ],
                 )
 
+            # From the full results of tuning select the best tuning solution for each task.
+            # Store the results in best_records_file.
             autotvm.record.pick_best(full_records_file, best_records_file)
             best_records = []
             with open(best_records_file, "r") as f:
                 tuning_records = f.readlines()
                 best_records = list(map(autotvm.record.decode, tuning_records))
 
-    # Compile the tuned model
+    # Using the best_records from the tuning process compile the model to use the TVM VM.
+    # This produces the compile model vm_exec.
     with autotvm.apply_history_best(best_records):
         with tvm.transform.PassContext(
             opt_level=3,
@@ -121,6 +155,16 @@ def tune(model_path, tvm_target, output_path, axis_map={}):
                 params=params,
             )
 
+    # Generate files required to launch tvm2onnx. This includes
+    #     * vm_exec_code.ro - a sequence of bitcode which specifies the order that the tuned
+    #           kernels are called.
+    #     * model.o - a compiled object ready for linking to the tvm2onnx-created custom op
+    #           shared library.
+    #     * constants.pkl - the constant map created here must be passed to tvm2onnx so for this
+    #           demo it is stored in a pickle file. This is just an easy method to get this
+    #           information to the script which builds the file .onnx model.
+    #     * metadata.json - stores model input and output information and which target the model
+    #           is compiled for.
     tdir_path = pathlib.Path(output_path)
     constants_map = {
         name: data.numpy() for name, data in vm_exec.get_late_bound_consts(0).items()
@@ -170,7 +214,7 @@ def main():  # pragma: no cover
     if args.axis_size:
         m = re.match("(.+)=(\\d+)", args.axis_size)
         axis_map[m[1]] = int(m[2])
-    print(axis_map)
+    print(f"Static axis replacement: {axis_map}")
 
     os.makedirs(args.output_path, exist_ok=True)
     if not os.path.exists(args.output_path):

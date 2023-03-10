@@ -53,6 +53,7 @@ def package(
     output_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["outputs"]}
     output_dtypes = {tensor["name"]: tensor["dtype"] for tensor in metadata["outputs"]}
     tvm_target = tvm.target.Target(metadata["target"])
+    dl_device_type = "kDLCUDA" if tvm_target.kind.name == "cuda" else "kDLCPU"
 
     compiler_flags: typing.List[str] = ["-fPIC"]
 
@@ -88,7 +89,7 @@ def package(
             input_dtypes=input_dtypes,
             output_shapes=output_shapes,
             output_dtypes=output_dtypes,
-            dl_device_type=metadata["device"],
+            dl_device_type=dl_device_type,
             compiler=compiler,
             compiler_flags=" ".join(compiler_flags),
         )
