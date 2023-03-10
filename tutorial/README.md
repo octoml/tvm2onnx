@@ -20,9 +20,8 @@ If you do not have access to the GPU, when running the tvm2onnx container you wi
 
 ## Introduction
 In this tutorial we will walk through the end-to-end process of
-* Converting an ONNX model to TVM
-* Optimizing the TVM model
-* Packaging the TVM model in ONNX
+* Optimizing your model using TVM
+* Packaging the TVM-optimized model in ONNX
 * Running the new ONNX model in onnxruntime
 
 tvm2onnx is designed to run on Linux.
@@ -53,17 +52,17 @@ make -j 8
 
 When done, the build will produce both *libtvm.so* and *libtvm_runtime.a* in the build directory.
 
-## Using TVM to Optimize Your Model
-This tutorial does not go into detail on how to optimize models using TVM. Since this is a complex topic, please refer to the [TVM Documentation](https://tvm.apache.org/docs/install/index.html) and the [TVM github repository](https://github.com/apache/tvm) for tutorials, code samples, and assistance. You can also [reach out to OctoML](https://octoml.ai/cp/first-model-free/) if you want us to handle TVM tuning for you with our advanced expertise.
+## Optimizing your model using TVM
+This tutorial does not go into detail on how to optimize models using TVM. You can [reach out to OctoML](https://octoml.ai/cp/first-model-free/) if you want us to handle TVM tuning for you with our advanced expertise for free. Alternatively, refer to the [TVM Documentation](https://tvm.apache.org/docs/install/index.html), [Intro to TVM's Tuning Process](https://tvm.apache.org/docs/tutorial/introduction.html#sphx-glr-tutorial-introduction-py), and the [TVM github repository](https://github.com/apache/tvm) for tutorials, code samples, and assistance. 
 
-This tutorial does contain a small [sample model](super-resolution.onnx) and [python script](basic_tune_model.py) that can be used to do quick but very basic TVM optimization of a model. To run the tuning script, make sure you're in the root directory in your Docker container then type
+This tutorial does contain a small [sample model](super-resolution.onnx) and [python script](basic_tune_model.py) that can be used to do quick but very basic TVM optimization of a model (i.e. we are not showing the best latency improvement or cost optimization you could expect from TVM). To run the tuning script, make sure you're in the root directory in your Docker container then type
 ```bash
 python tutorial/basic_tune_model.py --model tutorial/super-resolution.onnx --output opt_model --axis-size batch_size=1
 ```
 The resulting files are used in the next section to package the TVM-optimized model in ONNX. In your output directory, you should see `constants.pkl`, `metadata.json`, `model.o`, and `vm_exec_code.ro`.
 
-## Convert Your TVM Model to ONNX
-If you ran the python command in the previous section you can now package the TVM-optimized model in ONNX by
+## Packaging the TVM-optimized model in ONNX
+If you ran the python command in the previous section, you can now package the TVM-optimized model in ONNX by
 
 ```bash
 python scripts/onnx_package.py --model opt_model/model.o --ro opt_model/vm_exec_code.ro --constants opt_model/constants.pkl --metadata opt_model/metadata.json --tvm-runtime 3rdparty/tvm/build/libtvm_runtime.a --output demo.onnx.tar
@@ -80,7 +79,7 @@ The entire TVM-compiled model is contained in the node *demo* which is implement
 |:--:|
 |*A view of demo.onnx in netron.app*|
 
-## Run Your New ONNX Model with onnxruntime
+## Running the new ONNX model in onnxruntime
 After converting the model to .onnx format you should have a demo.onnx.tar file. You can run this model in onnxruntime by using the following
 ```
 python tutorial/run_inference.py --model demo.onnx.tar
