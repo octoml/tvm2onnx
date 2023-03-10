@@ -1,11 +1,11 @@
 import argparse
 import copy
+import json
 import os
 import pathlib
 import pickle
 import re
 import tempfile
-import json
 
 import onnx
 import tvm
@@ -58,7 +58,7 @@ def get_io_info(onnx_model, axis_map):
 def tune(model_path, tvm_target, output_path, axis_map={}):
     # extract workloads from relay program
     tvm_target = tvm.target.Target(tvm_target)
-    dl_device_type="kDLCUDA" if tvm_target.kind.name == "cuda" else "kDLCPU"
+    dl_device_type = "kDLCUDA" if tvm_target.kind.name == "cuda" else "kDLCPU"
     print("Extract tasks...")
     onnx_model = onnx.load(model_path)
     metadata = get_io_info(onnx_model, axis_map)

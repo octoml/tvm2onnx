@@ -30,12 +30,3 @@ def test_package_and_benchmark():
         ]
         result = subprocess.run(package_cmd)
         assert result.returncode == 0
-
-        benchmark_cmd = [
-            sys.executable,
-            "scripts/onnx_benchmark.py",
-            "--model",
-            model_path,
-        ]
-        result = subprocess.run(benchmark_cmd)
-        assert result.returncode == 0

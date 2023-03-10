@@ -99,7 +99,9 @@ def infer(
 
 
 def main():  # pragma: no cover
-    parser = argparse.ArgumentParser(description="Run a TVM-in-ONNX model in onnxruntime")
+    parser = argparse.ArgumentParser(
+        description="Run a TVM-in-ONNX model in onnxruntime"
+    )
     parser.add_argument(
         "--model",
         required=True,

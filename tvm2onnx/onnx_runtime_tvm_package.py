@@ -23,7 +23,6 @@ import tarfile
 import typing
 import uuid
 from tempfile import TemporaryDirectory
-import shutil
 
 import cookiecutter.generate
 import numpy as np
@@ -430,7 +429,9 @@ class ONNXRuntimeTVMPackage:
         :param build_dir: path to the build directory.
         """
         # Copy the template dir to the build dir.
-        build_template_dir = os.path.join(build_dir, os.path.basename(self.template_dir))
+        build_template_dir = os.path.join(
+            build_dir, os.path.basename(self.template_dir)
+        )
         shutil.copytree(self.template_dir, build_template_dir)
 
         cookiecutter.generate.generate_files(

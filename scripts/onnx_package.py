@@ -18,15 +18,17 @@ These ONNX wrapped TVM models can be run using onnx_benchmark.py.
 """
 
 import argparse
-import logging
-import pickle
-import os
 import json
-import typing
-import tempfile
+import logging
+import os
+import pathlib
+import pickle
 import shutil
+import tempfile
+import typing
 
 import tvm
+
 from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
 
 logging.basicConfig(level=logging.ERROR)
@@ -40,10 +42,10 @@ def package(
     tvm_runtime: str,
     output_path: str,
 ):
-    with open(constants_path, 'rb') as f:
+    with open(constants_path, "rb") as f:
         constants_map = pickle.load(f)
 
-    with open(metadata_path, 'r') as f:
+    with open(metadata_path, "r") as f:
         metadata = json.load(f)
 
     input_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["inputs"]}
@@ -75,13 +77,12 @@ def package(
     # Required for ONNXRuntime headers
     compiler_flags.append("-fms-extensions")
 
-
     with tempfile.TemporaryDirectory() as build_dir:
         packager = ONNXRuntimeTVMPackage(
             model_name="demo",
-            tvm_runtime_lib=tvm_runtime,
-            model_object=model_path,
-            model_ro=ro_path,
+            tvm_runtime_lib=pathlib.Path(tvm_runtime),
+            model_object=pathlib.Path(model_path),
+            model_ro=pathlib.Path(ro_path),
             constants_map=constants_map,
             input_shapes=input_shapes,
             input_dtypes=input_dtypes,
@@ -92,8 +93,9 @@ def package(
             compiler_flags=" ".join(compiler_flags),
         )
 
-        result = packager.build_package(build_dir)
+        result = packager.build_package(pathlib.Path(build_dir))
         shutil.copy(result, output_path)
+
 
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Package a tuned TVM model to ONNX.")
@@ -162,7 +164,7 @@ def main():  # pragma: no cover
         constants_path=constants_path,
         metadata_path=metadata_path,
         tvm_runtime=tvm_runtime_path,
-        output_path=output_path
+        output_path=output_path,
     )
 
 

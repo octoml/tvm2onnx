@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Directories containing Python code to format and lint.
-PYTHON_DIRECTORIES := tvm2onnx tests scripts
+PYTHON_DIRECTORIES := tvm2onnx tests scripts tutorial
 
 format: # Formats the Python code.
 	isort --settings-file=pyproject.toml ${PYTHON_DIRECTORIES}
