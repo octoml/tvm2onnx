@@ -366,7 +366,6 @@ class ONNXRuntimeTVMPackage:
             LOG.debug("custom op library generated: " + f.read())
         result = subprocess.run(["make"], capture_output=True, cwd=make_dir, text=True)
         if not result.returncode == 0:
-            breakpoint()
             err = result.stderr
             LOG.error("Error compiling custom op library:\n" + err)
             raise PackagingError("Failed to build tvm custom op wrapper\n" + err)
