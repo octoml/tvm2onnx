@@ -18,49 +18,155 @@ These ONNX wrapped TVM models can be run using onnx_benchmark.py.
 """
 
 import argparse
+import json
 import logging
+import os
 import pathlib
+import pickle
+import shutil
+import tempfile
+import typing
 
-import onnx
-from utils.relay_model import RelayModel
-from utils.setup_logging import setup_logging
+import tvm
 
-logging.basicConfig(level=logging.DEBUG)
+from tvm2onnx.onnx_runtime_tvm_package import ONNXRuntimeTVMPackage
+
+logging.basicConfig(level=logging.ERROR)
 
 
 def package(
     model_path: str,
+    ro_path: str,
+    constants_path: str,
+    metadata_path: str,
+    tvm_runtime: str,
     output_path: str,
-    debug_build: bool,
 ):
-    relay_model = RelayModel.from_onnx(onnx.load(model_path), dynamic_axis_substitute=1)
-    relay_model.package_to_onnx(
-        "mnist",
-        tvm_target="llvm",
-        output_path=pathlib.Path(output_path),
-        debug_build=debug_build,
-    )
+    with open(constants_path, "rb") as f:
+        constants_map = pickle.load(f)
+
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+
+    input_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["inputs"]}
+    input_dtypes = {tensor["name"]: tensor["dtype"] for tensor in metadata["inputs"]}
+    output_shapes = {tensor["name"]: tensor["shape"] for tensor in metadata["outputs"]}
+    output_dtypes = {tensor["name"]: tensor["dtype"] for tensor in metadata["outputs"]}
+    tvm_target = tvm.target.Target(metadata["target"])
+    dl_device_type = "kDLCUDA" if tvm_target.kind.name == "cuda" else "kDLCPU"
+
+    compiler_flags: typing.List[str] = ["-fPIC"]
+
+    if tvm_target.kind.name == "cuda":
+        compiler_flags.append("-L/usr/local/cuda/lib64")
+        compiler_flags.append("-lcuda")
+        compiler_flags.append("-lcudart")
+    if "cudnn" in tvm_target.libs:
+        compiler_flags.append("-L/usr/lib/x86_64-linux-gnu")
+        compiler_flags.append("-lcudnn")
+    if "cublas" in tvm_target.libs:
+        compiler_flags.append("-L/usr/local/cuda/lib64")
+        compiler_flags.append("-lcublas")
+    if "cblas" in tvm_target.libs:
+        compiler_flags.append("-L/lib/x86_64-linux-gnu")
+        compiler_flags.append("-lopenblas")
+
+    # ld segfaults when cross-compiling via tvm2onnx to ARM; use clang + lld instead.
+    compiler = "clang++-12"
+    compiler_flags.append("-fuse-ld=lld")
+
+    # Required for ONNXRuntime headers
+    compiler_flags.append("-fms-extensions")
+
+    with tempfile.TemporaryDirectory() as build_dir:
+        packager = ONNXRuntimeTVMPackage(
+            model_name="demo",
+            tvm_runtime_lib=pathlib.Path(tvm_runtime),
+            model_object=pathlib.Path(model_path),
+            model_ro=pathlib.Path(ro_path),
+            constants_map=constants_map,
+            input_shapes=input_shapes,
+            input_dtypes=input_dtypes,
+            output_shapes=output_shapes,
+            output_dtypes=output_dtypes,
+            dl_device_type=dl_device_type,
+            compiler=compiler,
+            compiler_flags=" ".join(compiler_flags),
+        )
+
+        result = packager.build_package(pathlib.Path(build_dir))
+        shutil.copy(result, output_path)
 
 
 def main():  # pragma: no cover
     parser = argparse.ArgumentParser(description="Package a tuned TVM model to ONNX.")
     parser.add_argument(
-        "--input",
+        "--model",
         required=True,
-        help="Model TVM file.",
+        help="A compiled model.o.",
+    )
+    parser.add_argument(
+        "--ro",
+        required=True,
+        help="The model's .ro file.",
+    )
+    parser.add_argument(
+        "--constants",
+        required=True,
+        help="The model's constants pickle file.",
+    )
+    parser.add_argument(
+        "--metadata",
+        required=True,
+        help="The model's metadata.json file.",
+    )
+    parser.add_argument(
+        "--tvm-runtime",
+        required=True,
+        help="The libtvm_runtime.a file.",
     )
     parser.add_argument(
         "--output",
         required=True,
         help="Output file in ONNX tar format.",
     )
-    parser.add_argument(
-        "--debug", action="store_true", default=False, help="Create a debug build"
-    )
     args = parser.parse_args()
 
-    setup_logging()
-    package(model_path=args.input, output_path=args.output, debug_build=args.debug)
+    model_path = os.path.abspath(args.model)
+    ro_path = os.path.abspath(args.ro)
+    constants_path = os.path.abspath(args.constants)
+    tvm_runtime_path = os.path.abspath(args.tvm_runtime)
+    metadata_path = os.path.abspath(args.metadata)
+    output_path = os.path.abspath(args.output)
+
+    if not os.path.exists(model_path):
+        print("model file does not exist")
+        exit(1)
+
+    if not os.path.exists(ro_path):
+        print("ro file does not exist")
+        exit(1)
+
+    if not os.path.exists(constants_path):
+        print("constants file does not exist")
+        exit(1)
+
+    if not os.path.exists(tvm_runtime_path):
+        print("tvm runtime file does not exist")
+        exit(1)
+
+    if not os.path.exists(metadata_path):
+        print("metadata file does not exist")
+        exit(1)
+
+    package(
+        model_path=model_path,
+        ro_path=ro_path,
+        constants_path=constants_path,
+        metadata_path=metadata_path,
+        tvm_runtime=tvm_runtime_path,
+        output_path=output_path,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

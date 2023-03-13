@@ -22,6 +22,7 @@ RUN apt-get update --fix-missing && \
     apt-get install -y \
         build-essential \
         clang-12 \
+        lld-12 \
         git \
         libopenblas-dev \
         gcc-aarch64-linux-gnu
@@ -41,9 +42,6 @@ ENV ORT_HOME="${THIRDPARTY_HOME}/onnxruntime"
 ENV PATH="/root/.poetry/bin:${TVM_HOME}/build:$PATH"
 ENV PYTHONPATH=${TVM2ONNX_HOME}:${TVM_HOME}/python:${PYTHONPATH}
 
-# Set to ascii to make stdout for subprocess.run in ascii. No funky chars.
-ENV LC_ALL="en_US.ascii"
-
 # Build TVM before we copy all the project source files
 # This is so we don't have to rebuild TVM every time we modify project source
 WORKDIR ${THIRDPARTY_HOME}
@@ -52,7 +50,7 @@ RUN git clone \
     --recursive \
     https://github.com/apache/tvm.git && \
     cd tvm && \
-    git checkout 44ed06ac9f019f9f06608504c3382d0905b6d5a2 && \
+    git checkout 082c4432fb48ea7dc58f553a7272e7a2585bb550 && \
     git submodule update
 
 WORKDIR ${THIRDPARTY_HOME}
@@ -76,7 +74,7 @@ RUN mkdir -p build && \
     echo "set(USE_LLVM llvm-config-12)" >> config.cmake && \
     echo "set(USE_LIBBACKTRACE OFF)" >> config.cmake && \
     echo "set(USE_SORT ON)" >> config.cmake && \
-    echo "set(USE_RPC OFF)" >> config.cmake && \
+    echo "set(USE_RPC ON)" >> config.cmake && \
     # TODO: rkimball build cuda/non-cuda builds
     # echo "set(USE_CUDA ON)" >> config.cmake && \
     # echo "set(USE_CUDNN ON)" >> config.cmake && \
@@ -99,6 +97,8 @@ ENV PATH=/usr/local/cuda/bin:/usr/local/nvidia/bin:${PATH}
 # AWS: /usr/lib/x86_64-linux-gnu (must be added earlier than /usr/local/cuda/compat/lib.real)
 #
 ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/compat/lib.real:/opt/intel/openvino_2021/inference_engine/lib/intel64/:/opt/intel/openvino_2021.4.689/deployment_tools/ngraph/lib/:/opt/intel/openvino_2021.4.689/deployment_tools/inference_engine/external/tbb/lib/
+ENV C_INCLUDE_PATH=${THIRDPARTY_HOME}/onnxruntime/include
+ENV CPLUS_INCLUDE_PATH=${THIRDPARTY_HOME}/onnxruntime/include:/usr/tvm2onnx/3rdparty/tvm/3rdparty/dmlc-core/include:/usr/tvm2onnx/3rdparty/tvm/3rdparty/dlpack/include:/usr/tvm2onnx/3rdparty/tvm/include
 
 COPY . /usr/tvm2onnx
 WORKDIR /usr/tvm2onnx

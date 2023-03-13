@@ -28,7 +28,7 @@ import numpy as np
 import onnx
 import onnxruntime
 
-logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.ERROR)
 
 
 def find(pattern, path):
@@ -54,7 +54,7 @@ def generate_input_data(
     return data
 
 
-def _do_benchmark(
+def infer(
     model_path,
 ):
     with tempfile.TemporaryDirectory() as tmp:
@@ -90,27 +90,26 @@ def _do_benchmark(
             provider_options=[{}],
             sess_options=sess_options,
         )
-        # output_names = [tensor.name for tensor in self.model.graph.output]
 
         input_data = generate_input_data(
             input_shapes=input_shapes, input_dtypes=input_dtypes
         )
-        # output_names = metadata.output_names
         result = engine.run(output_names=None, input_feed=input_data)
         print(result)
 
 
 def main():  # pragma: no cover
-    parser = argparse.ArgumentParser(description="Package model to a TVM onnx file.")
+    parser = argparse.ArgumentParser(
+        description="Run a TVM-in-ONNX model in onnxruntime"
+    )
     parser.add_argument(
         "--model",
         required=True,
-        help="Path to the Model to tune (in ONNX format).",
+        help="Path TVM-in-ONNX model in tar format.",
     )
     args = parser.parse_args()
 
-    # setup_logging()
-    _do_benchmark(
+    infer(
         model_path=args.model,
     )
 

@@ -205,7 +205,7 @@ class RelayModel:
             packager = ONNXRuntimeTVMPackage(
                 model_name=name,
                 tvm_runtime_lib=libtvm_runtime,
-                model_so=model_lib_path,
+                model_object=model_lib_path,
                 model_ro=ro_path,
                 constants_map=constants_map,
                 input_shapes=self.input_shapes,

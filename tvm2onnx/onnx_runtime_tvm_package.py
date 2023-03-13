@@ -113,7 +113,7 @@ class ONNXRuntimeTVMPackage:
         self,
         model_name: str,
         tvm_runtime_lib: pathlib.Path,
-        model_so: pathlib.Path,
+        model_object: pathlib.Path,
         model_ro: pathlib.Path,
         constants_map: typing.Dict[str, np.ndarray],
         input_shapes: InputShapes,
@@ -131,7 +131,7 @@ class ONNXRuntimeTVMPackage:
 
         :param model_name: the package name
         :param tvm_runtime_lib: the path to the static TVM runtime lib
-        :param model_so: the path to the compiled model.so
+        :param model_object: the path to the compiled model object file
         :param model_ro: the path to the compiled model.ro
         :param constants_map: the map of named constants
         :param input_shapes: the input shapes
@@ -144,9 +144,12 @@ class ONNXRuntimeTVMPackage:
         :param use_zero_copy:
             the flag that enables build of custom op using zero copy method for output tensors
         """
+        if not isinstance(compiler_flags, str):
+            print("compiler_flags must be a str")
+            exit(1)
         self._model_name = sanitize_model_name(model_name)
         self._tvm_runtime_lib = tvm_runtime_lib
-        self._model_so = model_so
+        self._model_object = model_object
         self._model_ro = model_ro
         self._constants_map = constants_map
         self._input_shapes = input_shapes
@@ -182,7 +185,7 @@ class ONNXRuntimeTVMPackage:
     @property
     def template_dir(self):
         """The template dir to copy and modify for this package job."""
-        from . import get_templates_dir
+        from tvm2onnx import get_templates_dir
 
         return get_templates_dir()
 
@@ -350,7 +353,7 @@ class ONNXRuntimeTVMPackage:
         shutil.move(os.path.join(source, "custom_op_library.def"), target)
         shutil.move(os.path.join(source, "Makefile"), target)
         try:
-            shutil.copy(self._model_so, os.path.join(target, "model.o"))
+            shutil.copy(self._model_object, os.path.join(target, "model.o"))
         except shutil.SameFileError:
             pass
         try:
@@ -425,7 +428,9 @@ class ONNXRuntimeTVMPackage:
         :param build_dir: path to the build directory.
         """
         # Copy the template dir to the build dir.
-        build_template_dir = build_dir / os.path.basename(self.template_dir)
+        build_template_dir = os.path.join(
+            build_dir, os.path.basename(self.template_dir)
+        )
         shutil.copytree(self.template_dir, build_template_dir)
 
         cookiecutter.generate.generate_files(

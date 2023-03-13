@@ -12,30 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import subprocess
 import sys
 import tempfile
 
 
 def test_package_and_benchmark():
-    with tempfile.NamedTemporaryFile() as tfile:
-        model_path = tfile.name
+    with tempfile.TemporaryDirectory() as tdir:
+        tune_cmd = [
+            sys.executable,
+            "tutorial/basic_tune_model.py",
+            "--model",
+            "tests/testdata/abtest.onnx",
+            "--output",
+            tdir,
+        ]
+        result = subprocess.run(tune_cmd)
+        assert result.returncode == 0
+
+        model_path = os.path.join(tdir, "model.o")
+        ro_path = os.path.join(tdir, "vm_exec_code.ro")
+        constants = os.path.join(tdir, "constants.pkl")
+        metadata = os.path.join(tdir, "metadata.json")
+        tvm_runtime = "3rdparty/tvm/build/libtvm_runtime.a"
+        output = os.path.join(tdir, "output.onnx")
         package_cmd = [
             sys.executable,
             "scripts/onnx_package.py",
-            "--input",
-            "tests/testdata/abtest.onnx",
-            "--output",
-            model_path,
-        ]
-        result = subprocess.run(package_cmd)
-        assert result.returncode == 0
-
-        benchmark_cmd = [
-            sys.executable,
-            "scripts/onnx_benchmark.py",
             "--model",
             model_path,
+            "--ro",
+            ro_path,
+            "--constants",
+            constants,
+            "--metadata",
+            metadata,
+            "--tvm-runtime",
+            tvm_runtime,
+            "--output",
+            output,
         ]
-        result = subprocess.run(benchmark_cmd)
+        result = subprocess.run(package_cmd)
         assert result.returncode == 0
