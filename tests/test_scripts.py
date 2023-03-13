@@ -29,6 +29,7 @@ def test_package_and_benchmark():
             tdir,
         ]
         result = subprocess.run(tune_cmd)
+        assert result.returncode == 0
 
         model_path = os.path.join(tdir, "model.o")
         ro_path = os.path.join(tdir, "vm_exec_code.ro")
