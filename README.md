@@ -14,9 +14,9 @@ There is a [tutorial](tutorial/README.md) which demonstrates a simple end-to-end
 Code development should be done in the docker container as it maintains all project dependencies.
 While it may be possible to develop without using the docker container that is not supported.
 ## Running lint and test
-From the root development directory in the docker container you can run</br>
-`make format` to format the code. Proper formatting is required for merge requests.</br>
-`make lint` to lint the code. Passing lint is required for merge requests.</br>
+From the root development directory in the docker container you can run
+`make format` to format the code. Proper formatting is required for merge requests.
+`make lint` to lint the code. Passing lint is required for merge requests.
 `make test` to run the test suite.
 ## Scripts
 Scripts are located in the tvm2onnx/scripts directory.
