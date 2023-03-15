@@ -7,6 +7,12 @@ docker build -t tvm2onnx -f Dockerfile .
 docker run -ti tvm2onnx
 ```
 
+If you're running on an ARM64 machine, such as an M1 Mac, add the `--platform=amd64` flag:
+```
+docker build --platform=amd64 -t tvm2onnx -f Dockerfile .
+docker run --platform=amd64 -ti tvm2onnx
+```
+
 Note that the build process could take around 30 minutes for the first-time user.
 
 ## Environment setup: VSCode
