@@ -60,9 +60,8 @@ RUN git clone \
     https://github.com/microsoft/onnxruntime.git
 
 WORKDIR ${TVM2ONNX_HOME}
-COPY pyproject.toml poetry.lock .
+COPY pyproject.toml poetry.lock ./
 
-WORKDIR ${TVM2ONNX_HOME}
 RUN pip install --upgrade pip && \
     pip install poetry==1.1.15 && \
     poetry config virtualenvs.create false && \

@@ -14,8 +14,9 @@
 
 [project]
 name = "tvm2onnx"
-version = "0.1"
-dependencies = []
+version = "1.0.0"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
 
 [tool.poetry]
 name = "tvm2onnx"
@@ -89,7 +90,5 @@ markers= [
 ]
 
 [build-system]
-requires = ['poetry-core~=1.0']
-build-backend = 'poetry.core.masonry.api'
-#requires = ["flit_core >=2,<4"]
-#build-backend = "flit_core.buildapi"
+requires = ["pdm-pep517"]
+build-backend = "pdm.pep517.api"
