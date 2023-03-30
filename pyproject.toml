@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+[project]
+name = "tvm2onnx"
+version = "1.0.0"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+
 [tool.poetry]
 name = "tvm2onnx"
 version = "0.1.0"
@@ -25,7 +31,6 @@ packages = [
 python = ">=3.7,<3.11"
 onnx = "^1.10"
 cookiecutter = "^1.7.2"
-
 
 [tool.poetry.dev-dependencies]
 # TVM Dependencies
@@ -85,5 +90,5 @@ markers= [
 ]
 
 [build-system]
-requires = ["poetry>=1.0.10"]
-build-backend = "poetry.masonry.api"
+requires = ["pdm-pep517"]
+build-backend = "pdm.pep517.api"
